@@ -1,0 +1,476 @@
+import { create } from "zustand";
+import { axiosInstance } from "../lib/axios";
+import toast from "react-hot-toast";
+import { useAuthStore } from "./useAuthStore";
+
+export const useChatStore = create((set, get) => ({
+  allContacts: [],
+  chats: [],
+  messages: [],
+  activeTab: localStorage.getItem("activeTab") || "chats",
+  selectedUser: JSON.parse(localStorage.getItem("selectedUser") || "null"),
+  friendStatus: null, // { status: "friends"|"sent"|"received"|"not_friends", requestId?, senderName? }
+  requestsRefreshTrigger: 0, // increment to trigger requests refresh
+  isUsersLoading: false,
+  isMessagesLoading: false,
+  isChatDeleted: false, // tracks if current chat is soft-deleted
+  isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) === true,
+  hiddenMessages: JSON.parse(localStorage.getItem("hiddenMessages") || "[]"),
+  editingMessage: null,
+  deletedMessageTemp: null,
+  unreadCounts: {}, // { senderId: { count, lastMessage, lastMessageTime } }
+
+  toggleSound: () => {
+    localStorage.setItem("isSoundEnabled", !get().isSoundEnabled);
+    set({ isSoundEnabled: !get().isSoundEnabled });
+  },
+
+  setActiveTab: (tab) => {
+    localStorage.setItem("activeTab", tab);
+    set({ activeTab: tab });
+  },
+  setSelectedUser: async (selectedUser) => {
+    if (selectedUser) {
+      localStorage.setItem("selectedUser", JSON.stringify(selectedUser));
+      // Mark messages as read when opening a chat
+      try {
+        await axiosInstance.put(`/messages/read/${selectedUser._id}`);
+        // Clear unread count for this user
+        const newUnreadCounts = { ...get().unreadCounts };
+        delete newUnreadCounts[selectedUser._id];
+        set({ unreadCounts: newUnreadCounts });
+      } catch (error) {
+        console.log("Error marking messages as read:", error);
+      }
+    } else {
+      localStorage.removeItem("selectedUser");
+    }
+    set({ selectedUser, isChatDeleted: false });
+  },
+
+  // Fetch unread counts from server
+  fetchUnreadCounts: async () => {
+    try {
+      const res = await axiosInstance.get("/messages/unread-counts");
+      const counts = {};
+      res.data.forEach((item) => {
+        counts[item.senderId] = {
+          count: item.unreadCount,
+          lastMessage: item.lastMessage,
+          lastMessageTime: item.lastMessageTime,
+        };
+      });
+      set({ unreadCounts: counts });
+    } catch (error) {
+      console.log("Error fetching unread counts:", error);
+    }
+  },
+
+  // Increment unread count for a sender (called when receiving new message)
+  incrementUnreadCount: (senderId, lastMessage) => {
+    const currentCounts = get().unreadCounts;
+    const existing = currentCounts[senderId] || { count: 0 };
+    set({
+      unreadCounts: {
+        ...currentCounts,
+        [senderId]: {
+          count: existing.count + 1,
+          lastMessage: lastMessage || "(Image)",
+          lastMessageTime: new Date().toISOString(),
+        },
+      },
+    });
+  },
+
+  // Clear unread count for a sender
+  clearUnreadCount: (senderId) => {
+    const newUnreadCounts = { ...get().unreadCounts };
+    delete newUnreadCounts[senderId];
+    set({ unreadCounts: newUnreadCounts });
+  },
+
+  fetchFriendStatus: async (otherUserId) => {
+    try {
+      const res = await axiosInstance.get(`/friends/status/${otherUserId}`);
+      set({ friendStatus: res.data });
+    } catch (error) {
+      set({ friendStatus: null });
+    }
+  },
+
+  getAllContacts: async () => {
+    set({ isUsersLoading: true });
+    try {
+      const res = await axiosInstance.get("/messages/contacts");
+      set({ allContacts: res.data });
+    } catch (error) {
+      toast.error(error.response.data.message);
+    } finally {
+      set({ isUsersLoading: false });
+    }
+  },
+  getMyChatPartners: async () => {
+    set({ isUsersLoading: true });
+    try {
+      const res = await axiosInstance.get("/messages/chats");
+      set({ chats: res.data });
+    } catch (error) {
+      toast.error(error.response.data.message);
+    } finally {
+      set({ isUsersLoading: false });
+    }
+  },
+
+  getMessagesByUserId: async (userId) => {
+    set({ isMessagesLoading: true });
+    try {
+      const res = await axiosInstance.get(`/messages/${userId}`);
+      const hidden = get().hiddenMessages;
+      
+      // Handle new response format: { messages, isDeleted }
+      const messagesData = res.data.messages || res.data;
+      const isDeleted = res.data.isDeleted || false;
+      
+      set({ 
+        messages: Array.isArray(messagesData) ? messagesData.filter((m) => !hidden.includes(m._id)) : [],
+        isChatDeleted: isDeleted 
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Something went wrong");
+    } finally {
+      set({ isMessagesLoading: false });
+    }
+  },
+
+  sendMessage: async (messageData) => {
+    const { selectedUser, messages, friendStatus } = get();
+    const { authUser } = useAuthStore.getState();
+
+    // prevent sending when not friends
+    if (!friendStatus || friendStatus.status !== "friends") {
+      toast.error("You must be friends to chat");
+      return;
+    }
+
+    const tempId = `temp-${Date.now()}`;
+    const isScheduled = !!messageData.scheduledAt;
+
+    const optimisticMessage = {
+      _id: tempId,
+      senderId: authUser._id,
+      receiverId: selectedUser._id,
+      text: messageData.text,
+      image: messageData.image,
+      createdAt: new Date().toISOString(),
+      isOptimistic: true, // flag to identify optimistic messages (optional)
+      // Scheduled message fields
+      scheduledAt: messageData.scheduledAt || null,
+      isScheduled: isScheduled,
+      status: isScheduled ? "scheduled" : "sent",
+    };
+    // immidetaly update the ui by adding the message
+    set({ messages: [...messages, optimisticMessage] });
+
+    try {
+      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+      set({ messages: messages.concat(res.data) });
+      
+      if (isScheduled) {
+        toast.success("Message scheduled successfully!");
+      }
+    } catch (error) {
+      // remove optimistic message on failure
+      set({ messages: messages });
+      toast.error(error.response?.data?.message || "Something went wrong");
+    }
+  },
+
+  subscribeToMessages: () => {
+    const { selectedUser, isSoundEnabled } = get();
+    if (!selectedUser) return;
+
+    const socket = useAuthStore.getState().socket;
+
+    socket.on("newMessage", (newMessage) => {
+      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
+      if (!isMessageSentFromSelectedUser) return;
+
+      const currentMessages = get().messages;
+      set({ messages: [...currentMessages, newMessage] });
+
+      // Mark as read immediately since we're viewing this chat
+      axiosInstance.put(`/messages/read/${selectedUser._id}`).catch(() => {});
+
+      if (isSoundEnabled) {
+        const notificationSound = new Audio("/sounds/notification.mp3");
+
+        notificationSound.currentTime = 0; // reset to start
+        notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+      }
+    });
+
+    socket.on("message_deleted", ({ messageId }) => {
+      const currentMessages = get().messages;
+      set({ messages: currentMessages.filter((m) => m._id !== messageId) });
+    });
+
+    socket.on("message_edited", (updatedMessage) => {
+      const currentMessages = get().messages;
+      set({
+        messages: currentMessages.map((m) =>
+          m._id === updatedMessage._id ? updatedMessage : m
+        ),
+      });
+    });
+
+    // Handle scheduled message sent by server (update UI for sender)
+    socket.on("scheduled_message_sent", (sentMessage) => {
+      const currentMessages = get().messages;
+      // Update the scheduled message to show as sent
+      set({
+        messages: currentMessages.map((m) =>
+          m._id === sentMessage._id ? sentMessage : m
+        ),
+      });
+    });
+  },
+
+  unsubscribeFromMessages: () => {
+    const socket = useAuthStore.getState().socket;
+    socket.off("newMessage");
+    socket.off("message_deleted");
+    socket.off("message_edited");
+    socket.off("scheduled_message_sent");
+  },
+
+  subscribeToFriendRequests: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) {
+      console.warn("Socket not connected yet");
+      return;
+    }
+
+    // listen for new incoming requests
+    socket.on("incoming_request", (data) => {
+      console.log("Received incoming_request event:", data);
+      toast.success(`${data.senderName} sent you a friend request!`);
+      // trigger refresh of requests component
+      set({ requestsRefreshTrigger: get().requestsRefreshTrigger + 1 });
+    });
+
+    // listen for accepted requests
+    socket.on("friend_request_accepted", (data) => {
+      console.log("Received friend_request_accepted event:", data);
+      toast.success("Friend request accepted!");
+      // refresh friend status if currently viewing that user
+      const { selectedUser } = get();
+      if (selectedUser && selectedUser._id === data.userId) {
+        get().fetchFriendStatus(selectedUser._id);
+      }
+      // also trigger requests refresh
+      set({ requestsRefreshTrigger: get().requestsRefreshTrigger + 1 });
+    });
+
+    // listen for rejected requests
+    socket.on("friend_request_rejected", (data) => {
+      console.log("Received friend_request_rejected event:", data);
+      toast.info("Friend request was rejected");
+    });
+  },
+
+  unsubscribeFromFriendRequests: () => {
+    const socket = useAuthStore.getState().socket;
+    socket.off("incoming_request");
+    socket.off("friend_request_accepted");
+    socket.off("friend_request_rejected");
+  },
+
+  getFavourites: async () => {
+    set({ isUsersLoading: true });
+    try {
+      const res = await axiosInstance.get("/friends/list/favourites");
+      set({ chats: res.data });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to fetch favourites");
+      set({ chats: [] });
+    } finally {
+      set({ isUsersLoading: false });
+    }
+  },
+
+  toggleFavourite: async (userId) => {
+    try {
+      const res = await axiosInstance.post(`/friends/favourite/${userId}`);
+      return res.data.isFavourite;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to toggle favourite");
+      return null;
+    }
+  },
+
+  isFavourite: async (userId) => {
+    try {
+      const res = await axiosInstance.get(`/friends/favourite/${userId}`);
+      return res.data.isFavourite;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  deleteForMe: (messageId) => {
+    const deletedMsg = get().messages.find((m) => m._id === messageId);
+    // Remove from UI but don't persist to localStorage yet
+    set({
+      messages: get().messages.filter((m) => m._id !== messageId),
+      deletedMessageTemp: deletedMsg || null,
+    });
+  },
+
+  confirmDeleteForMe: (messageId) => {
+    const hidden = [...get().hiddenMessages, messageId];
+    localStorage.setItem("hiddenMessages", JSON.stringify(hidden));
+    set({ hiddenMessages: hidden, deletedMessageTemp: null });
+  },
+
+  undoDeleteForMe: () => {
+    const { deletedMessageTemp, messages } = get();
+    if (!deletedMessageTemp) return;
+    // Re-insert in correct chronological position
+    const restored = [...messages, deletedMessageTemp].sort(
+      (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+    );
+    set({ messages: restored, deletedMessageTemp: null });
+  },
+
+  deleteForEveryone: async (messageId) => {
+    try {
+      await axiosInstance.delete(`/messages/${messageId}`);
+      set({ messages: get().messages.filter((m) => m._id !== messageId) });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete message");
+    }
+  },
+
+  setEditingMessage: (message) => set({ editingMessage: message }),
+
+  editMessage: async (messageId, text) => {
+    try {
+      const res = await axiosInstance.put(`/messages/${messageId}`, { text });
+      set({
+        messages: get().messages.map((m) => (m._id === messageId ? res.data : m)),
+        editingMessage: null,
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to edit message");
+    }
+  },
+
+  // Remove friend - removes friendship, ChatKey, and FriendRequest records
+  removeFriend: async (userId) => {
+    try {
+      await axiosInstance.delete(`/friends/remove/${userId}`);
+      const { activeTab } = get();
+      // Update chats and contacts to remove the user
+      // Also clear messages to prevent stale UI (they'll reload when friend again)
+      set({
+        chats: get().chats.filter((chat) => chat._id !== userId),
+        allContacts: get().allContacts.filter((contact) => contact._id !== userId),
+        friendStatus: { status: "not_friends" },
+        messages: [], // Clear messages UI (preserved in DB)
+      });
+      // Refresh all lists to ensure UI is up-to-date
+      get().getMyChatPartners();
+      get().getAllContacts();
+      // Also refresh favourites if currently viewing that tab
+      if (activeTab === "favourites") {
+        get().getFavourites();
+      }
+      toast.success("Friend removed successfully");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to remove friend");
+      return false;
+    }
+  },
+
+  // Get other user's profile (read-only)
+  getOtherUserProfile: async (userId) => {
+    try {
+      const res = await axiosInstance.get(`/friends/profile/${userId}`);
+      return res.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load profile");
+      return null;
+    }
+  },
+
+  // Subscribe to friend removal events
+  subscribeToFriendRemoval: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.on("friend_removed", (data) => {
+      console.log("Received friend_removed event:", data);
+      const { activeTab } = get();
+      // Update chats and contacts
+      set({
+        chats: get().chats.filter((chat) => chat._id !== data.userId),
+        allContacts: get().allContacts.filter((contact) => contact._id !== data.userId),
+      });
+      // If currently viewing this user's chat, update friend status and clear messages
+      const { selectedUser } = get();
+      if (selectedUser && selectedUser._id === data.userId) {
+        set({ 
+          friendStatus: { status: "not_friends" },
+          messages: [], // Clear messages UI (preserved in DB)
+        });
+      }
+      // Refresh all lists to ensure UI is up-to-date
+      get().getMyChatPartners();
+      get().getAllContacts();
+      // Also refresh favourites if currently viewing that tab
+      if (activeTab === "favourites") {
+        get().getFavourites();
+      }
+      toast.info("A friend has been removed");
+    });
+  },
+
+  unsubscribeFromFriendRemoval: () => {
+    const socket = useAuthStore.getState().socket;
+    if (socket) {
+      socket.off("friend_removed");
+    }
+  },
+
+  // Subscribe to global new message events for unread count updates
+  subscribeToUnreadUpdates: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.on("newMessage", (newMessage) => {
+      const { selectedUser, isSoundEnabled } = get();
+      
+      // If we're not viewing this sender's chat, increment unread count
+      if (!selectedUser || selectedUser._id !== newMessage.senderId) {
+        get().incrementUnreadCount(newMessage.senderId, newMessage.text);
+        
+        // Play notification sound for background messages
+        if (isSoundEnabled) {
+          const notificationSound = new Audio("/sounds/notification.mp3");
+          notificationSound.currentTime = 0;
+          notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+        }
+      }
+    });
+  },
+
+  unsubscribeFromUnreadUpdates: () => {
+    const socket = useAuthStore.getState().socket;
+    if (socket) {
+      // Note: Don't remove newMessage here as subscribeToMessages uses it too
+      // The listener handles both cases internally
+    }
+  },
+}));
+
