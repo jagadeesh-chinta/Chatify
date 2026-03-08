@@ -39,10 +39,11 @@ app.use("/api/user", userRoutes);
 /* compatibility: expose friend endpoints at top-level /api/* paths */
 app.use("/api", friendRoutes);
 
+
 /* ---------------- SERVE FRONTEND ---------------- */
 
 if (ENV.NODE_ENV === "production") {
-  const frontendPath = path.join(__dirname, "../../frontend/dist");
+  const frontendPath = path.join(__dirname, "../frontend/dist");
 
   app.use(express.static(frontendPath));
 
