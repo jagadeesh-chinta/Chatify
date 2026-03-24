@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Trash2Icon, TrashIcon, PencilIcon } from "lucide-react";
 
-function MessageContextMenu({ x, y, onClose, onDeleteForMe, onDeleteForEveryone, onEdit }) {
+function MessageContextMenu({ x, y, onClose, onDeleteForMe, onDeleteForEveryone, onEdit, canEditOrDeleteForEveryone = true }) {
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -45,28 +45,32 @@ function MessageContextMenu({ x, y, onClose, onDeleteForMe, onDeleteForEveryone,
   };
 
   return createPortal(
-    <div ref={menuRef} style={style} className="bg-slate-800 border border-slate-600 rounded-lg shadow-xl py-1 min-w-[180px]">
+    <div ref={menuRef} style={style} className="chat-glass-strong rounded-lg shadow-xl py-1 min-w-[180px]">
       <button
         onClick={() => { onDeleteForMe(); onClose(); }}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-white/10 transition-colors"
       >
         <TrashIcon className="w-4 h-4 text-slate-400" />
         Delete for Me
       </button>
-      <button
-        onClick={() => { onDeleteForEveryone(); onClose(); }}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-slate-700 transition-colors"
-      >
-        <Trash2Icon className="w-4 h-4" />
-        Delete for Everyone
-      </button>
-      <button
-        onClick={() => { onEdit(); onClose(); }}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
-      >
-        <PencilIcon className="w-4 h-4 text-slate-400" />
-        Edit
-      </button>
+      {canEditOrDeleteForEveryone && (
+        <>
+          <button
+            onClick={() => { onDeleteForEveryone(); onClose(); }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-white/10 transition-colors"
+          >
+            <Trash2Icon className="w-4 h-4" />
+            Delete for Everyone
+          </button>
+          <button
+            onClick={() => { onEdit(); onClose(); }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-200 hover:bg-white/10 transition-colors"
+          >
+            <PencilIcon className="w-4 h-4 text-slate-400" />
+            Edit
+          </button>
+        </>
+      )}
     </div>,
     document.body
   );

@@ -19,6 +19,7 @@ export const useChatStore = create((set, get) => ({
   editingMessage: null,
   deletedMessageTemp: null,
   unreadCounts: {}, // { senderId: { count, lastMessage, lastMessageTime } }
+  typingUsers: {}, // { [userId]: true }
 
   toggleSound: () => {
     localStorage.setItem("isSoundEnabled", !get().isSoundEnabled);
@@ -45,7 +46,7 @@ export const useChatStore = create((set, get) => ({
     } else {
       localStorage.removeItem("selectedUser");
     }
-    set({ selectedUser, isChatDeleted: false });
+    set({ selectedUser, isChatDeleted: false, typingUsers: selectedUser ? get().typingUsers : {} });
   },
 
   // Fetch unread counts from server
@@ -163,6 +164,9 @@ export const useChatStore = create((set, get) => ({
       image: messageData.image,
       createdAt: new Date().toISOString(),
       isOptimistic: true, // flag to identify optimistic messages (optional)
+      isDelivered: false,
+      isRead: false,
+      readAt: null,
       // Scheduled message fields
       scheduledAt: messageData.scheduledAt || null,
       isScheduled: isScheduled,
@@ -173,7 +177,40 @@ export const useChatStore = create((set, get) => ({
 
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: messages.concat(res.data) });
+      const serverMessage = res.data;
+
+      set((state) => {
+        const currentMessages = state.messages;
+        const optimisticIndex = currentMessages.findIndex((m) => m._id === tempId);
+
+        // Replace optimistic message in-place to avoid losing real-time socket updates.
+        if (optimisticIndex !== -1) {
+          const optimistic = currentMessages[optimisticIndex];
+          const merged = {
+            ...serverMessage,
+            isDelivered: optimistic.isDelivered ?? serverMessage.isDelivered,
+            isRead: optimistic.isRead ?? serverMessage.isRead,
+            readAt: optimistic.readAt || serverMessage.readAt,
+          };
+
+          const next = [...currentMessages];
+          next[optimisticIndex] = merged;
+          return { messages: next };
+        }
+
+        // Fallback: upsert if socket events already inserted the same server message.
+        const existingIndex = currentMessages.findIndex((m) => m._id === serverMessage._id);
+        if (existingIndex !== -1) {
+          const next = [...currentMessages];
+          next[existingIndex] = {
+            ...currentMessages[existingIndex],
+            ...serverMessage,
+          };
+          return { messages: next };
+        }
+
+        return { messages: [...currentMessages, serverMessage] };
+      });
       
       if (isScheduled) {
         toast.success("Message scheduled successfully!");
@@ -233,6 +270,80 @@ export const useChatStore = create((set, get) => ({
         ),
       });
     });
+
+    socket.on("messages_seen", ({ senderId, receiverId }) => {
+      const { authUser } = useAuthStore.getState();
+      if (!authUser) return;
+
+      // Only update when current user is original sender and the selected chat is the reader.
+      if (authUser._id !== senderId || selectedUser._id !== receiverId) return;
+
+      const nowIso = new Date().toISOString();
+      const currentMessages = get().messages;
+      // Read receipts are silent updates: do not play notification sound here.
+      set({
+        messages: currentMessages.map((m) =>
+          m.senderId === senderId && m.receiverId === receiverId && !m.isRead
+            ? { ...m, isDelivered: true, isRead: true, readAt: nowIso }
+            : m
+        ),
+      });
+    });
+
+    socket.on("message_delivered", ({ messageId, senderId, receiverId }) => {
+      const { authUser } = useAuthStore.getState();
+      if (!authUser) return;
+      if (authUser._id !== senderId || selectedUser._id !== receiverId) return;
+
+      const currentMessages = get().messages;
+      let matched = false;
+      set({
+        messages: currentMessages.map((m) =>
+          m._id === messageId
+            ? ((matched = true), { ...m, isDelivered: true })
+            : m
+        ),
+      });
+
+      // If delivery arrives before optimistic replacement, mark latest pending own message.
+      if (!matched) {
+        const latestPendingOwn = [...currentMessages]
+          .reverse()
+          .find((m) => m.senderId === senderId && m.receiverId === receiverId && !m.isDelivered);
+
+        if (latestPendingOwn) {
+          set({
+            messages: get().messages.map((m) =>
+              m._id === latestPendingOwn._id ? { ...m, isDelivered: true } : m
+            ),
+          });
+        }
+      }
+    });
+
+    socket.on("user_typing", ({ fromUserId }) => {
+      if (selectedUser._id !== fromUserId) return;
+      set({
+        typingUsers: {
+          ...get().typingUsers,
+          [fromUserId]: true,
+        },
+      });
+    });
+
+    socket.on("user_stop_typing", ({ fromUserId }) => {
+      if (selectedUser._id !== fromUserId) return;
+      const nextTypingUsers = { ...get().typingUsers };
+      delete nextTypingUsers[fromUserId];
+      set({ typingUsers: nextTypingUsers });
+    });
+
+    socket.on("newMessage", (newMessage) => {
+      if (selectedUser._id !== newMessage.senderId) return;
+      const nextTypingUsers = { ...get().typingUsers };
+      delete nextTypingUsers[newMessage.senderId];
+      set({ typingUsers: nextTypingUsers });
+    });
   },
 
   unsubscribeFromMessages: () => {
@@ -241,6 +352,10 @@ export const useChatStore = create((set, get) => ({
     socket.off("message_deleted");
     socket.off("message_edited");
     socket.off("scheduled_message_sent");
+    socket.off("messages_seen");
+    socket.off("message_delivered");
+    socket.off("user_typing");
+    socket.off("user_stop_typing");
   },
 
   subscribeToFriendRequests: () => {
@@ -450,6 +565,16 @@ export const useChatStore = create((set, get) => ({
 
     socket.on("newMessage", (newMessage) => {
       const { selectedUser, isSoundEnabled } = get();
+      const { authUser } = useAuthStore.getState();
+
+      // Acknowledge delivery as soon as message reaches receiver client socket.
+      if (newMessage.receiverId === authUser?._id) {
+        socket.emit("message_delivered", {
+          messageId: newMessage._id,
+          senderId: newMessage.senderId,
+          receiverId: newMessage.receiverId,
+        });
+      }
       
       // If we're not viewing this sender's chat, increment unread count
       if (!selectedUser || selectedUser._id !== newMessage.senderId) {

@@ -193,16 +193,17 @@ function ProfilePage() {
   };
 
   const displayImage = authUser?.profilePic || "/avatar.png";
+  const pageTheme = localStorage.getItem("chatTheme") || "dark";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-2 md:p-4">
+    <div className={`feature-page chat-theme-${pageTheme} flex items-start justify-center p-2 md:p-4 md:py-8 overflow-y-auto`}>
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="mb-4 md:mb-6">
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="cursor-pointer relative z-10 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all min-h-[44px]"
+            className="feature-back-btn cursor-pointer relative z-10 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all min-h-[44px]"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">Back to Chat</span>
@@ -210,7 +211,7 @@ function ProfilePage() {
         </div>
 
         {/* Main Card */}
-        <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-xl p-4 md:p-8 shadow-2xl">
+        <div className="feature-card p-4 md:p-8">
           {/* Profile Icon Header */}
           <div className="text-center mb-6 md:mb-8">
             <div className="flex justify-center mb-4">

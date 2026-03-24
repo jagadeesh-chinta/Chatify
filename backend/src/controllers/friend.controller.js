@@ -5,6 +5,7 @@ import ChatKey from "../models/ChatKey.js";
 import DeletedChat from "../models/DeletedChat.js";
 import { generateSharedKey } from "../services/bb84.service.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
+import { createAndSendNotification } from "./notification.controller.js";
 
 // helper to sort two ids
 const sortedPair = (id1, id2) => {
@@ -54,6 +55,16 @@ export const sendFriendRequest = async (req, res) => {
       });
     } catch (e) {
       console.error('socket emit failed', e);
+    }
+
+    try {
+      await createAndSendNotification({
+        receiverId,
+        senderId,
+        type: "friend_request",
+      });
+    } catch (notificationError) {
+      console.error("friend request notification error:", notificationError);
     }
 
     res.status(201).json(newReq);
@@ -127,6 +138,16 @@ export const acceptRequest = async (req, res) => {
       console.error('socket emit failed', e);
     }
 
+    try {
+      await createAndSendNotification({
+        receiverId: request.senderId,
+        senderId: receiverId,
+        type: "friend_accept",
+      });
+    } catch (notificationError) {
+      console.error("friend accept notification error:", notificationError);
+    }
+
     res.status(200).json({ 
       message: "Friend request accepted",
       keyGenerated: !!chatKeyResult // Indicate if key was successfully generated
@@ -157,6 +178,16 @@ export const rejectRequest = async (req, res) => {
       io.to(senderIdStr).emit('friend_request_rejected', { userId: receiverId.toString() });
     } catch (e) {
       console.error('socket emit failed', e);
+    }
+
+    try {
+      await createAndSendNotification({
+        receiverId: request.senderId,
+        senderId: receiverId,
+        type: "friend_reject",
+      });
+    } catch (notificationError) {
+      console.error("friend reject notification error:", notificationError);
     }
 
     res.status(200).json({ message: "Friend request rejected" });

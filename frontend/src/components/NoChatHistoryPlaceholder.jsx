@@ -16,13 +16,13 @@ const NoChatHistoryPlaceholder = ({ name }) => {
         <div className="h-px w-32 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent mx-auto"></div>
       </div>
       <div className="flex flex-wrap gap-2 justify-center">
-        <button className="px-4 py-2 text-xs font-medium text-cyan-400 bg-cyan-500/10 rounded-full hover:bg-cyan-500/20 transition-colors">
+        <button className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors">
           👋 Say Hello
         </button>
-        <button className="px-4 py-2 text-xs font-medium text-cyan-400 bg-cyan-500/10 rounded-full hover:bg-cyan-500/20 transition-colors">
+        <button className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors">
           🤝 How are you?
         </button>
-        <button className="px-4 py-2 text-xs font-medium text-cyan-400 bg-cyan-500/10 rounded-full hover:bg-cyan-500/20 transition-colors">
+        <button className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors">
           📅 Meet up soon?
         </button>
       </div>

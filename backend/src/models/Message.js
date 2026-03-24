@@ -28,6 +28,14 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isDelivered: {
+      type: Boolean,
+      default: false,
+    },
+    readAt: {
+      type: Date,
+      default: null,
+    },
     // Scheduled message fields
     scheduledAt: {
       type: Date,

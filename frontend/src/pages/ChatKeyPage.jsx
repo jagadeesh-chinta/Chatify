@@ -119,10 +119,18 @@ function ChatKeyPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const pageTheme = localStorage.getItem("chatTheme") || "dark";
+
+  const renderCentered = (content) => (
+    <div className={`feature-page chat-theme-${pageTheme} w-full flex items-center justify-center p-4`}>
+      {content}
+    </div>
+  );
+
   // Loading state while checking password status
   if (loading && isPasswordSet === null) {
-    return (
-      <div className="bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg w-full max-w-2xl p-6 relative z-10">
+    return renderCentered(
+      <div className="feature-card w-full max-w-2xl p-6 relative z-10">
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
         </div>
@@ -132,12 +140,12 @@ function ChatKeyPage() {
 
   // Password Setup Form (First Time)
   if (!isAuthenticated && isPasswordSet === false) {
-    return (
-      <div className="bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg w-full max-w-md p-4 md:p-6 mx-2 relative z-10">
+    return renderCentered(
+      <div className="feature-card w-full max-w-md p-4 md:p-6 mx-2 relative z-10">
         <div className="flex items-center gap-3 md:gap-4 mb-6">
           <button
             onClick={() => navigate("/")}
-            className="text-slate-400 hover:text-slate-200 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+            className="feature-back-btn text-slate-400 hover:text-slate-200 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
@@ -212,12 +220,12 @@ function ChatKeyPage() {
 
   // Password Verification Form (Returning User)
   if (!isAuthenticated && isPasswordSet === true) {
-    return (
-      <div className="bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg w-full max-w-md p-4 md:p-6 mx-2 relative z-10">
+    return renderCentered(
+      <div className="feature-card w-full max-w-md p-4 md:p-6 mx-2 relative z-10">
         <div className="flex items-center gap-3 md:gap-4 mb-6">
           <button
             onClick={() => navigate("/")}
-            className="text-slate-400 hover:text-slate-200 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+            className="feature-back-btn text-slate-400 hover:text-slate-200 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
@@ -272,13 +280,13 @@ function ChatKeyPage() {
   }
 
   // Authenticated - Show Chat Keys
-  return (
-    <div className="bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg w-full max-w-2xl p-4 md:p-6 mx-2 relative z-10">
+  return renderCentered(
+    <div className="feature-card w-full max-w-2xl p-4 md:p-6 mx-2 relative z-10">
       {/* Header */}
       <div className="flex items-center gap-3 md:gap-4 mb-6">
         <button
           onClick={() => navigate("/")}
-          className="text-slate-400 hover:text-slate-200 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+          className="feature-back-btn text-slate-400 hover:text-slate-200 transition-colors p-2 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
         >
           <ArrowLeft className="w-6 h-6" />
         </button>

@@ -8,7 +8,7 @@ import { Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 function ContactList() {
-  const { setSelectedUser, unreadCounts } = useChatStore();
+  const { setSelectedUser, unreadCounts, selectedUser } = useChatStore();
   const { onlineUsers } = useAuthStore();
   const [friends, setFriends] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,7 +132,7 @@ function ContactList() {
         return (
           <div
             key={contact._id}
-            className="bg-cyan-500/10 p-3 md:p-4 rounded-lg cursor-pointer hover:bg-cyan-500/20 active:bg-cyan-500/30 transition-colors min-h-[60px]"
+            className={`chat-list-item p-3 md:p-4 rounded-xl cursor-pointer min-h-[60px] ${selectedUser?._id === contact._id ? "chat-list-item-active" : ""}`}
             onClick={() => setSelectedUser(contact)}
             onContextMenu={(e) => handleContextMenu(e, contact)}
           >
@@ -152,7 +152,7 @@ function ContactList() {
               </div>
               {/* Unread count badge */}
               {unreadCount > 0 && (
-                <div className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="chat-unread-badge flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
                   <span className="text-white text-xs font-bold">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
@@ -167,7 +167,7 @@ function ContactList() {
       {contextMenu && createPortal(
         <div
           ref={menuRef}
-          className="fixed bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-2 min-w-[160px]"
+          className="fixed chat-glass-strong rounded-lg shadow-2xl py-2 min-w-[160px]"
           style={{ 
             top: contextMenu.y, 
             left: contextMenu.x,
@@ -176,7 +176,7 @@ function ContactList() {
         >
           <button
             onClick={handleDeleteChat}
-            className="w-full flex items-center gap-2 px-4 py-3 text-red-400 hover:bg-slate-700 transition-colors text-sm min-h-[44px]"
+            className="w-full flex items-center gap-2 px-4 py-3 text-red-400 hover:bg-white/10 transition-colors text-sm min-h-[44px]"
           >
             <Trash2 className="w-4 h-4" />
             Delete Chat
@@ -188,7 +188,7 @@ function ContactList() {
       {/* Undo Snackbar - rendered via portal */}
       {undoData && createPortal(
         <div 
-          className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl px-4 py-3 flex items-center gap-4 animate-fade-in"
+          className="fixed bottom-20 left-1/2 transform -translate-x-1/2 chat-glass-strong rounded-lg shadow-xl px-4 py-3 flex items-center gap-4 animate-fade-in"
           style={{ zIndex: 9999 }}
         >
           <span className="text-slate-200 text-sm">Chat deleted</span>

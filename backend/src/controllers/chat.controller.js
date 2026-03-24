@@ -5,6 +5,40 @@ import Friend from "../models/Friend.js";
 import ChatKey from "../models/ChatKey.js";
 import PDFDocument from "pdfkit";
 
+const RESTORE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+const permanentlyDeleteConversation = async (userAId, userBId) => {
+  await Message.deleteMany({
+    $or: [
+      { senderId: userAId, receiverId: userBId },
+      { senderId: userBId, receiverId: userAId },
+    ],
+  });
+
+  await DeletedChat.deleteMany({
+    $or: [
+      { userId: userAId, deletedUserId: userBId },
+      { userId: userBId, deletedUserId: userAId },
+    ],
+  });
+};
+
+const purgeExpiredDeletedChatsForUser = async (userId) => {
+  const now = new Date();
+  const legacyExpiryCutoff = new Date(Date.now() - RESTORE_WINDOW_MS);
+  const expiredChats = await DeletedChat.find({
+    userId,
+    $or: [
+      { expiresAt: { $lte: now } },
+      { expiresAt: { $exists: false }, createdAt: { $lte: legacyExpiryCutoff } },
+    ],
+  });
+
+  for (const expired of expiredChats) {
+    await permanentlyDeleteConversation(expired.userId, expired.deletedUserId);
+  }
+};
+
 /**
  * Soft delete a chat - adds to deleted chats list
  * Messages remain in database, only hidden from user's view
@@ -67,15 +101,23 @@ export const getDeletedChats = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    await purgeExpiredDeletedChatsForUser(userId);
+
     const deletedChats = await DeletedChat.getDeletedChatsForUser(userId);
 
     // Format response with user details
-    const result = deletedChats.map((dc) => ({
-      deletedUserId: dc.deletedUserId._id,
-      fullName: dc.deletedUserId.fullName,
-      profilePic: dc.deletedUserId.profilePic,
-      deletedAt: dc.createdAt,
-    }));
+    const result = deletedChats.map((dc) => {
+      const expiresAt = dc.expiresAt || new Date(new Date(dc.createdAt).getTime() + RESTORE_WINDOW_MS);
+      return {
+        deletedUserId: dc.deletedUserId._id,
+        fullName: dc.deletedUserId.fullName,
+        profilePic: dc.deletedUserId.profilePic,
+        deletedAt: dc.createdAt,
+        expiresAt,
+        remainingMs: Math.max(0, new Date(expiresAt).getTime() - Date.now()),
+        totalWindowMs: RESTORE_WINDOW_MS,
+      };
+    });
 
     res.status(200).json(result);
   } catch (error) {

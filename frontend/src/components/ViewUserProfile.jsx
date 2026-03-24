@@ -31,14 +31,16 @@ function ViewUserProfile({ userId, onBack }) {
     });
   };
 
+  const pageTheme = localStorage.getItem("chatTheme") || "dark";
+
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className={`feature-page chat-theme-${pageTheme} flex flex-col h-full`}>
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 md:px-6 py-4 bg-slate-800/50 border-b border-slate-700/50">
+        <div className="feature-card !rounded-none border-b border-white/10 flex items-center gap-3 px-4 md:px-6 py-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all min-h-[44px]"
+            className="feature-back-btn flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all min-h-[44px]"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">Back to Chat</span>
@@ -55,12 +57,12 @@ function ViewUserProfile({ userId, onBack }) {
 
   if (!profile) {
     return (
-      <div className="flex flex-col h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className={`feature-page chat-theme-${pageTheme} flex flex-col h-full`}>
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 md:px-6 py-4 bg-slate-800/50 border-b border-slate-700/50">
+        <div className="feature-card !rounded-none border-b border-white/10 flex items-center gap-3 px-4 md:px-6 py-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all min-h-[44px]"
+            className="feature-back-btn flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all min-h-[44px]"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">Back to Chat</span>
@@ -78,12 +80,12 @@ function ViewUserProfile({ userId, onBack }) {
   const displayImage = profile.profilePic || "/avatar.png";
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className={`feature-page chat-theme-${pageTheme} flex flex-col h-full`}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-4 bg-slate-800/50 border-b border-slate-700/50">
+      <div className="feature-card !rounded-none border-b border-white/10 flex items-center gap-3 px-4 md:px-6 py-4">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all min-h-[44px]"
+          className="feature-back-btn flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all min-h-[44px]"
         >
           <ArrowLeft className="w-5 h-5" />
           <span className="text-sm font-medium">Back to Chat</span>
@@ -94,7 +96,7 @@ function ViewUserProfile({ userId, onBack }) {
       <div className="flex-1 flex items-center justify-center p-4 md:p-6 overflow-y-auto">
         <div className="w-full max-w-md">
           {/* Profile Card */}
-          <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-2xl">
+          <div className="feature-card p-6 md:p-8">
             {/* Profile Icon Header */}
             <div className="text-center mb-6">
               <div className="flex justify-center mb-4">

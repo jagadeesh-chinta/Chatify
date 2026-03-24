@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 
+const RESTORE_WINDOW_HOURS = 48;
+const getExpiryDate = () => new Date(Date.now() + RESTORE_WINDOW_HOURS * 60 * 60 * 1000);
+
 /**
  * DeletedChat Model - Stores soft-deleted chats for users
  * When a user deletes a chat, the reference is stored here
@@ -16,6 +19,12 @@ const deletedChatSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    expiresAt: {
+      type: Date,
+      required: true,
+      default: getExpiryDate,
+      index: true,
     },
   },
   { timestamps: true }
@@ -44,11 +53,15 @@ deletedChatSchema.statics.getDeletedChatsForUser = async function (userId) {
  */
 deletedChatSchema.statics.softDeleteChat = async function (userId, deletedUserId) {
   try {
-    return await this.create({ userId, deletedUserId });
+    return await this.create({ userId, deletedUserId, expiresAt: getExpiryDate() });
   } catch (error) {
     if (error.code === 11000) {
-      // Already deleted, return existing record
-      return this.findOne({ userId, deletedUserId });
+      // Already deleted: reset expiry window from now
+      return this.findOneAndUpdate(
+        { userId, deletedUserId },
+        { $set: { expiresAt: getExpiryDate() } },
+        { new: true }
+      );
     }
     throw error;
   }

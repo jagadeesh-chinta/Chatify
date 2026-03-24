@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import friendRoutes from "./routes/friend.route.js";
+import notificationRoutes from "./routes/notification.route.js";
 import chatkeyRoutes from "./routes/chatkey.route.js";
 import chatRoutes from "./routes/chat.route.js";
 import userRoutes from "./routes/user.route.js";
@@ -29,6 +30,7 @@ app.use(cookieParser()); //req.cookies
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/friends", friendRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/chatkey", chatkeyRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/user", userRoutes);

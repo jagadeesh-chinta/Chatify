@@ -429,18 +429,23 @@ export const markMessagesAsRead = async (req, res) => {
         senderId: senderId,
         receiverId: myId,
         isRead: false,
+        status: "sent",
       },
       {
-        $set: { isRead: true },
+        $set: {
+          isDelivered: true,
+          isRead: true,
+          readAt: new Date(),
+        },
       }
     );
 
-    // Notify the sender that their messages have been read (optional)
+    // Notify sender in real-time for seen receipt updates.
     const senderSocketId = getReceiverSocketId(senderId);
-    if (senderSocketId) {
-      io.to(senderSocketId).emit("messages_read", {
-        readBy: myId.toString(),
-        count: result.modifiedCount,
+    if (senderSocketId && result.modifiedCount > 0) {
+      io.to(senderSocketId).emit("messages_seen", {
+        senderId: senderId.toString(),
+        receiverId: myId.toString(),
       });
     }
 

@@ -132,15 +132,17 @@ function CropProfileImage() {
     }
   };
 
+  const pageTheme = localStorage.getItem("chatTheme") || "dark";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+    <div className={`feature-page chat-theme-${pageTheme} flex items-center justify-center p-4`}>
       <div className="w-full max-w-xl">
         {/* Header */}
         <div className="mb-6">
           <button
             type="button"
             onClick={handleCancel}
-            className="cursor-pointer relative z-10 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all"
+            className="feature-back-btn cursor-pointer relative z-10 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">Back to Profile</span>
@@ -148,7 +150,7 @@ function CropProfileImage() {
         </div>
 
         {/* Main Card */}
-        <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-xl p-8 shadow-2xl">
+        <div className="feature-card p-8">
           {/* Header */}
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-slate-100 mb-1">Crop Profile Picture</h1>

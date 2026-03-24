@@ -18,6 +18,7 @@ function RestoreChat() {
   const [verifiedChats, setVerifiedChats] = useState({}); // { deletedUserId: true/false }
   const [keyInputs, setKeyInputs] = useState({}); // { deletedUserId: "enteredKey" }
   const [verifyingKey, setVerifyingKey] = useState(null); // deletedUserId currently being verified
+  const [nowMs, setNowMs] = useState(Date.now());
 
   // Fetch deleted chats on mount
   useEffect(() => {
@@ -36,6 +37,32 @@ function RestoreChat() {
 
     fetchDeletedChats();
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatRemainingTime = (remainingMs) => {
+    const safeMs = Math.max(0, remainingMs);
+    const totalSeconds = Math.floor(safeMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const hh = String(hours).padStart(2, "0");
+    const mm = String(minutes).padStart(2, "0");
+    const ss = String(seconds).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  };
+
+  const activeDeletedChats = deletedChats.filter((chat) => {
+    const expiresAtMs = new Date(chat.expiresAt).getTime();
+    return expiresAtMs > nowMs;
+  });
 
   // Handle key input change
   const handleKeyInputChange = (deletedUserId, value) => {
@@ -126,15 +153,17 @@ function RestoreChat() {
     setChatHistory(null);
   };
 
+  const pageTheme = localStorage.getItem("chatTheme") || "dark";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-2 md:p-4">
+    <div className={`feature-page chat-theme-${pageTheme} flex items-center justify-center p-2 md:p-4`}>
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="mb-4 md:mb-8 flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="cursor-pointer relative z-10 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all min-h-[44px]"
+            className="feature-back-btn cursor-pointer relative z-10 flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all min-h-[44px]"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">Back</span>
@@ -206,7 +235,7 @@ function RestoreChat() {
         )}
 
         {/* Main Card */}
-        <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-xl p-8 shadow-2xl">
+        <div className="feature-card p-8">
           {/* Title */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
@@ -230,7 +259,7 @@ function RestoreChat() {
           )}
 
           {/* No Deleted Chats */}
-          {!loading && deletedChats.length === 0 && (
+          {!loading && activeDeletedChats.length === 0 && (
             <div className="text-center py-8">
               <Users className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
               <p className="text-slate-400 mb-4">No deleted chats found</p>
@@ -244,9 +273,13 @@ function RestoreChat() {
           )}
 
           {/* Deleted Chats List */}
-          {!loading && deletedChats.length > 0 && (
+          {!loading && activeDeletedChats.length > 0 && (
             <div className="space-y-4">
-              {deletedChats.map((chat) => (
+              {activeDeletedChats.map((chat) => {
+                const remainingMs = Math.max(0, new Date(chat.expiresAt).getTime() - nowMs);
+                const remainingLabel = formatRemainingTime(remainingMs);
+
+                return (
                 <div
                   key={chat.deletedUserId}
                   className="bg-slate-700/30 border border-slate-600/30 rounded-lg p-4"
@@ -263,6 +296,12 @@ function RestoreChat() {
                       <h3 className="text-slate-200 font-medium">{chat.fullName}</h3>
                       <p className="text-slate-500 text-xs">
                         Deleted: {new Date(chat.deletedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide">Expires In</p>
+                      <p className={`text-sm font-semibold ${remainingMs <= 10 * 60 * 1000 ? "text-red-400" : "text-cyan-300"}`}>
+                        {remainingLabel}
                       </p>
                     </div>
                   </div>
@@ -326,7 +365,7 @@ function RestoreChat() {
                     </div>
                   )}
                 </div>
-              ))}
+              );})}
             </div>
           )}
         </div>

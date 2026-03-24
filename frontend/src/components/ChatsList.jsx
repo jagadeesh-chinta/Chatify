@@ -6,7 +6,7 @@ import { useAuthStore } from "../store/useAuthStore";
 import { axiosInstance } from "../lib/axios";
 
 function ChatsList() {
-  const { getFavourites, chats, isUsersLoading, setSelectedUser, unreadCounts } = useChatStore();
+  const { getFavourites, chats, isUsersLoading, setSelectedUser, unreadCounts, selectedUser } = useChatStore();
   const { onlineUsers } = useAuthStore();
   const [lastMessages, setLastMessages] = useState({});
 
@@ -58,7 +58,7 @@ function ChatsList() {
         return (
           <div
             key={chat._id}
-            className="bg-cyan-500/10 p-3 md:p-4 rounded-lg cursor-pointer hover:bg-cyan-500/20 active:bg-cyan-500/30 transition-colors min-h-[60px]"
+            className={`chat-list-item p-3 md:p-4 rounded-xl cursor-pointer min-h-[60px] ${selectedUser?._id === chat._id ? "chat-list-item-active" : ""}`}
             onClick={() => setSelectedUser(chat)}
           >
             <div className="flex items-center gap-2 md:gap-3">
@@ -75,7 +75,7 @@ function ChatsList() {
               </div>
               {/* Unread count badge */}
               {unreadCount > 0 && (
-                <div className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="chat-unread-badge flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
                   <span className="text-white text-xs font-bold">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>

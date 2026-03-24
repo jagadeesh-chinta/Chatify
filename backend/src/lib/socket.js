@@ -3,6 +3,7 @@ import http from "http";
 import express from "express";
 import { ENV } from "./env.js";
 import { socketAuthMiddleware } from "../middleware/socket.auth.middleware.js";
+import Message from "../models/Message.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -37,6 +38,51 @@ io.on("connection", (socket) => {
 
   // io.emit() is used to send events to all connected clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
+
+  socket.on("typing", ({ fromUserId, toUserId }) => {
+    if (!fromUserId || !toUserId) return;
+    if (fromUserId !== userId) return;
+    io.to(toUserId).emit("user_typing", { fromUserId, toUserId });
+  });
+
+  socket.on("stop_typing", ({ fromUserId, toUserId }) => {
+    if (!fromUserId || !toUserId) return;
+    if (fromUserId !== userId) return;
+    io.to(toUserId).emit("user_stop_typing", { fromUserId, toUserId });
+  });
+
+  socket.on("message_delivered", async ({ messageId, senderId, receiverId }) => {
+    try {
+      if (!messageId || !senderId || !receiverId) return;
+      if (receiverId !== userId) return;
+
+      const updated = await Message.findOneAndUpdate(
+        {
+          _id: messageId,
+          senderId,
+          receiverId,
+          isDelivered: false,
+          status: "sent",
+        },
+        {
+          $set: {
+            isDelivered: true,
+          },
+        },
+        { new: true }
+      );
+
+      if (updated) {
+        io.to(senderId).emit("message_delivered", {
+          messageId,
+          senderId,
+          receiverId,
+        });
+      }
+    } catch (error) {
+      console.error("message_delivered handler error:", error.message);
+    }
+  });
 
   // with socket.on we listen for events from clients
   socket.on("disconnect", () => {
