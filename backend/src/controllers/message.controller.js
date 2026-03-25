@@ -1,10 +1,152 @@
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 import Message from "../models/Message.js";
+import Document from "../models/Document.js";
 import Friend from "../models/Friend.js";
 import User from "../models/User.js";
 import ChatKey from "../models/ChatKey.js";
 import DeletedChat from "../models/DeletedChat.js";
+import { Readable } from "stream";
+
+const DOCUMENT_EXTENSIONS_REGEX = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|txt|csv|rtf|odt|ods|odp)(\?|$)/i;
+const DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "text/csv",
+  "application/rtf",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
+]);
+const DOCUMENT_EXTENSIONS = new Set([".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".csv", ".rtf", ".odt", ".ods", ".odp"]);
+
+const getFileExtension = (fileName) => {
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex === -1) return "";
+  return fileName.slice(dotIndex).toLowerCase();
+};
+
+const isDocumentMimeOrExt = (mimetype, originalname = "") => {
+  const ext = getFileExtension(originalname);
+  return DOCUMENT_MIME_TYPES.has(mimetype) || DOCUMENT_EXTENSIONS.has(ext);
+};
+
+const getMediaTypeFromUrl = (url) => {
+  if (!url || typeof url !== "string") return null;
+  if (/\.mp4(\?|$)/i.test(url)) return "video";
+  if (/\.mp3(\?|$)/i.test(url)) return "audio";
+  if (/\.pdf(\?|$)/i.test(url)) return "pdf";
+  if (DOCUMENT_EXTENSIONS_REGEX.test(url)) return "document";
+  return null;
+};
+
+const getMessagePreviewText = (message) => {
+  if (message.text) return message.text;
+  if (message.type === "image" || message.image) return "(Image)";
+  if (message.type === "video" || /\.mp4(\?|$)/i.test(message.fileUrl || "")) return "(Video)";
+  if (message.type === "audio" || /\.mp3(\?|$)/i.test(message.fileUrl || "")) return "(Audio)";
+  if (message.type === "pdf" || /\.pdf(\?|$)/i.test(message.fileUrl || "")) return "(PDF)";
+  if (message.type === "document" || DOCUMENT_EXTENSIONS_REGEX.test(message.fileUrl || "")) return "(Document)";
+  return "(Attachment)";
+};
+
+const deleteCloudinaryAsset = async (document) => {
+  if (!document?.cloudinaryPublicId) return;
+
+  const triedResourceTypes = new Set();
+  const resourceTypes = [document.cloudinaryResourceType, "raw", "video", "image"].filter(Boolean);
+
+  for (const resourceType of resourceTypes) {
+    if (triedResourceTypes.has(resourceType)) continue;
+    triedResourceTypes.add(resourceType);
+
+    try {
+      const result = await cloudinary.uploader.destroy(document.cloudinaryPublicId, {
+        resource_type: resourceType,
+      });
+
+      if (result?.result === "ok" || result?.result === "not found") {
+        return;
+      }
+    } catch {
+      // try the next resource type fallback
+    }
+  }
+};
+
+export const uploadMediaFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Media file is required" });
+    }
+
+    let mediaType = null;
+    let folder = null;
+
+    if (req.file.mimetype === "video/mp4") {
+      mediaType = "video";
+      folder = "videos";
+    } else if (req.file.mimetype === "audio/mpeg" || req.file.mimetype === "audio/mp3") {
+      mediaType = "audio";
+      folder = "audios";
+    } else if (req.file.mimetype === "application/pdf") {
+      mediaType = "pdf";
+      folder = "pdfs";
+    } else if (isDocumentMimeOrExt(req.file.mimetype, req.file.originalname)) {
+      mediaType = "document";
+      folder = "documents";
+    }
+
+    if (!mediaType || !folder) {
+      return res.status(400).json({ message: "Invalid media type" });
+    }
+    const uploadResponse = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: "auto",
+          folder: `chatify/${folder}`,
+          use_filename: true,
+          unique_filename: true,
+          overwrite: false,
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          return resolve(result);
+        }
+      );
+
+      Readable.from(req.file.buffer).pipe(stream);
+    });
+
+    const document = await Document.create({
+      uploadedBy: req.user._id,
+      url: uploadResponse.secure_url,
+      cloudinaryPublicId: uploadResponse.public_id,
+      cloudinaryResourceType: uploadResponse.resource_type,
+      fileName: req.file.originalname,
+      fileType: req.file.mimetype,
+      fileSize: req.file.size,
+      mediaType,
+    });
+
+    res.status(201).json({
+      url: uploadResponse.secure_url,
+      type: mediaType,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      documentId: document._id,
+    });
+  } catch (error) {
+    console.error("Error in uploadMediaFile controller:", error.message);
+    res.status(500).json({ message: "Failed to upload media" });
+  }
+};
 
 export const getAllContacts = async (req, res) => {
   try {
@@ -80,12 +222,12 @@ export const getMessagesByUserId = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image, scheduledAt } = req.body;
+    const { text, image, scheduledAt, type, fileUrl, fileName, fileSize, duration, thumbnailUrl } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
-    if (!text && !image) {
-      return res.status(400).json({ message: "Text or image is required." });
+    if (!text && !image && !fileUrl) {
+      return res.status(400).json({ message: "Text, image, or media file is required." });
     }
     if (senderId.equals(receiverId)) {
       return res.status(400).json({ message: "Cannot send messages to yourself." });
@@ -124,17 +266,43 @@ export const sendMessage = async (req, res) => {
     }
 
     let imageUrl;
+    let messageType = "text";
+
     if (image) {
       // upload base64 image to cloudinary
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
+      messageType = "image";
     }
+
+    if (fileUrl) {
+      const explicitType = type === "video" || type === "audio" || type === "pdf" || type === "document" ? type : null;
+      const inferredType = getMediaTypeFromUrl(fileUrl);
+      messageType = explicitType || inferredType;
+
+      if (!messageType) {
+        return res.status(400).json({ message: "Invalid media type. Only MP4, MP3, and document files are allowed." });
+      }
+    }
+
+    if (!image && !fileUrl && text) {
+      messageType = "text";
+    }
+
+    const parsedFileSize = Number(fileSize);
+    const parsedDuration = Number(duration);
 
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
       image: imageUrl,
+      type: messageType,
+      fileUrl: fileUrl || undefined,
+      fileName: fileName || undefined,
+      fileSize: Number.isFinite(parsedFileSize) && parsedFileSize > 0 ? parsedFileSize : undefined,
+      duration: Number.isFinite(parsedDuration) && parsedDuration > 0 ? parsedDuration : undefined,
+      thumbnailUrl: thumbnailUrl || undefined,
       scheduledAt: parsedScheduledAt,
       isScheduled,
       status,
@@ -146,6 +314,7 @@ export const sendMessage = async (req, res) => {
     if (!isScheduled) {
       const receiverSocketId = getReceiverSocketId(receiverId);
       if (receiverSocketId) {
+        io.to(receiverSocketId).emit("send_message", newMessage);
         io.to(receiverSocketId).emit("newMessage", newMessage);
       }
     }
@@ -277,6 +446,15 @@ export const deleteMessage = async (req, res) => {
     }
 
     const receiverId = message.receiverId.toString();
+
+    if (message.fileUrl) {
+      const document = await Document.findOne({ url: message.fileUrl });
+      if (document) {
+        await deleteCloudinaryAsset(document);
+        await Document.deleteOne({ _id: document._id });
+      }
+    }
+
     await Message.findByIdAndDelete(messageId);
 
     // Notify both users via socket
@@ -390,6 +568,9 @@ export const getUnreadCounts = async (req, res) => {
           _id: "$senderId",
           count: { $sum: 1 },
           lastMessage: { $last: "$text" },
+          lastType: { $last: "$type" },
+          lastImage: { $last: "$image" },
+          lastFileUrl: { $last: "$fileUrl" },
           lastMessageTime: { $last: "$createdAt" },
         },
       },
@@ -399,7 +580,12 @@ export const getUnreadCounts = async (req, res) => {
     const result = unreadCounts.map((item) => ({
       senderId: item._id.toString(),
       unreadCount: item.count,
-      lastMessage: item.lastMessage || "(Image)",
+      lastMessage: getMessagePreviewText({
+        text: item.lastMessage,
+        type: item.lastType,
+        image: item.lastImage,
+        fileUrl: item.lastFileUrl,
+      }),
       lastMessageTime: item.lastMessageTime,
     }));
 

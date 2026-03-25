@@ -23,22 +23,26 @@
 }
 
 html,
-body,
-#root {
+body {
   width: 100%;
-  height: 100%;
   margin: 0;
   padding: 0;
 }
 
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
 body {
   font-family: 'Poppins', sans-serif;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .auth-screen {
   position: relative;
   background: #2c5364;
+  flex-shrink: 0;
 }
 
 .auth-screen::before {
@@ -79,8 +83,10 @@ body {
 }
 
 .auth-form-card {
-  background: #f8fafc;
-  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(248, 250, 252, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 28px 70px rgba(15, 23, 42, 0.32);
 }
 
@@ -176,8 +182,46 @@ body {
   }
 }
 
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .auth-form-transition {
   animation: auth-form-fade-slide 220ms ease-out;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out forwards;
+}
+
+/* Scrollbar Styling */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Auth Screen Wrapper */
+.auth-screen-wrapper {
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Prevent body scroll while preserving scroll on auth-screen-wrapper */
+html {
+  scroll-behavior: smooth;
 }
 
 @media (max-width: 767px) {
@@ -186,6 +230,7 @@ body {
   }
 
   .auth-form-card {
+    background: rgba(248, 250, 252, 0.65);
     box-shadow: 0 16px 36px rgba(15, 23, 42, 0.24);
   }
 }

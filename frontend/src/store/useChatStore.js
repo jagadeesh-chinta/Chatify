@@ -3,6 +3,40 @@ import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
 
+const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_AUDIO_PDF_SIZE_BYTES = 100 * 1024 * 1024;
+const DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".csv", ".rtf", ".odt", ".ods", ".odp"];
+const DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "text/csv",
+  "application/rtf",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
+]);
+
+const hasAllowedDocumentExtension = (fileName = "") => {
+  const lowered = fileName.toLowerCase();
+  return DOCUMENT_EXTENSIONS.some((ext) => lowered.endsWith(ext));
+};
+
+const getMessagePreviewText = (message) => {
+  if (message?.text) return message.text;
+  if (message?.type === "video") return "(Video)";
+  if (message?.type === "audio") return "(Audio)";
+  if (message?.type === "pdf") return "(PDF)";
+  if (message?.type === "document") return "(Document)";
+  if (message?.type === "image" || message?.image) return "(Image)";
+  return "(Attachment)";
+};
+
 export const useChatStore = create((set, get) => ({
   allContacts: [],
   chats: [],
@@ -13,6 +47,8 @@ export const useChatStore = create((set, get) => ({
   requestsRefreshTrigger: 0, // increment to trigger requests refresh
   isUsersLoading: false,
   isMessagesLoading: false,
+  isUploadingMedia: false,
+  mediaUploadProgress: 0,
   isChatDeleted: false, // tracks if current chat is soft-deleted
   isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) === true,
   hiddenMessages: JSON.parse(localStorage.getItem("hiddenMessages") || "[]"),
@@ -76,7 +112,7 @@ export const useChatStore = create((set, get) => ({
         ...currentCounts,
         [senderId]: {
           count: existing.count + 1,
-          lastMessage: lastMessage || "(Image)",
+          lastMessage: lastMessage || "(Attachment)",
           lastMessageTime: new Date().toISOString(),
         },
       },
@@ -147,6 +183,23 @@ export const useChatStore = create((set, get) => ({
     const { selectedUser, messages, friendStatus } = get();
     const { authUser } = useAuthStore.getState();
 
+    if (messageData.mediaFile) {
+      const { type, size, name } = messageData.mediaFile;
+      const isMp4 = type === "video/mp4";
+      const isMp3 = type === "audio/mpeg" || type === "audio/mp3";
+      const isDocument = DOCUMENT_MIME_TYPES.has(type) || hasAllowedDocumentExtension(name);
+
+      if (isMp4 && size > MAX_VIDEO_SIZE_BYTES) {
+        toast.error("Video size must be less than 50MB");
+        return;
+      }
+
+      if ((isMp3 || isDocument) && size > MAX_AUDIO_PDF_SIZE_BYTES) {
+        toast.error("Audio/Document size must be less than 100MB");
+        return;
+      }
+    }
+
     // prevent sending when not friends
     if (!friendStatus || friendStatus.status !== "friends") {
       toast.error("You must be friends to chat");
@@ -160,8 +213,14 @@ export const useChatStore = create((set, get) => ({
       _id: tempId,
       senderId: authUser._id,
       receiverId: selectedUser._id,
-      text: messageData.text,
+      text: messageData.text || "",
       image: messageData.image,
+      type: messageData.type || (messageData.image ? "image" : "text"),
+      fileUrl: messageData.fileUrl || null,
+      fileName: messageData.fileName || messageData.mediaFile?.name || null,
+      fileSize: messageData.fileSize || messageData.mediaFile?.size || null,
+      duration: messageData.duration || null,
+      thumbnailUrl: messageData.thumbnailUrl || null,
       createdAt: new Date().toISOString(),
       isOptimistic: true, // flag to identify optimistic messages (optional)
       isDelivered: false,
@@ -176,7 +235,48 @@ export const useChatStore = create((set, get) => ({
     set({ messages: [...messages, optimisticMessage] });
 
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+      const payload = {
+        text: messageData.text,
+        image: messageData.image,
+        scheduledAt: messageData.scheduledAt,
+      };
+
+      if (messageData.mediaFile) {
+        set({ isUploadingMedia: true, mediaUploadProgress: 0 });
+
+        const formData = new FormData();
+        formData.append("file", messageData.mediaFile);
+
+        const uploadRes = await axiosInstance.post("/messages/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (progressEvent) => {
+            const total = progressEvent.total || 0;
+            if (!total) return;
+            const percent = Math.min(100, Math.round((progressEvent.loaded * 100) / total));
+            set({ mediaUploadProgress: percent });
+          },
+        });
+
+        payload.type = uploadRes.data.type;
+        payload.fileUrl = uploadRes.data.url;
+        payload.fileName = messageData.fileName || uploadRes.data.fileName;
+        payload.fileSize = messageData.fileSize || uploadRes.data.fileSize;
+        if (typeof messageData.duration === "number") {
+          payload.duration = messageData.duration;
+        }
+        if (messageData.thumbnailUrl) {
+          payload.thumbnailUrl = messageData.thumbnailUrl;
+        }
+      } else if (messageData.type === "video" || messageData.type === "audio" || messageData.type === "pdf" || messageData.type === "document") {
+        payload.type = messageData.type;
+        payload.fileUrl = messageData.fileUrl;
+        payload.fileName = messageData.fileName;
+        payload.fileSize = messageData.fileSize;
+        payload.duration = messageData.duration;
+        payload.thumbnailUrl = messageData.thumbnailUrl;
+      }
+
+      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, payload);
       const serverMessage = res.data;
 
       set((state) => {
@@ -219,6 +319,8 @@ export const useChatStore = create((set, get) => ({
       // remove optimistic message on failure
       set({ messages: messages });
       toast.error(error.response?.data?.message || "Something went wrong");
+    } finally {
+      set({ isUploadingMedia: false, mediaUploadProgress: 0 });
     }
   },
 
@@ -578,7 +680,7 @@ export const useChatStore = create((set, get) => ({
       
       // If we're not viewing this sender's chat, increment unread count
       if (!selectedUser || selectedUser._id !== newMessage.senderId) {
-        get().incrementUnreadCount(newMessage.senderId, newMessage.text);
+        get().incrementUnreadCount(newMessage.senderId, getMessagePreviewText(newMessage));
         
         // Play notification sound for background messages
         if (isSoundEnabled) {

@@ -20,6 +20,30 @@ const messageSchema = new mongoose.Schema(
     image: {
       type: String,
     },
+    type: {
+      type: String,
+      enum: ["text", "image", "video", "audio", "pdf", "document"],
+      default: "text",
+    },
+    fileUrl: {
+      type: String,
+    },
+    fileName: {
+      type: String,
+      trim: true,
+    },
+    fileSize: {
+      type: Number,
+      min: 0,
+    },
+    duration: {
+      type: Number,
+      min: 0,
+    },
+    thumbnailUrl: {
+      type: String,
+      trim: true,
+    },
     edited: {
       type: Boolean,
       default: false,

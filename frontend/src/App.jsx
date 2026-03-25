@@ -26,7 +26,9 @@ function App()
     location.pathname === "/chatkey" ||
     location.pathname === "/requests" ||
     location.pathname === "/restore-chat" ||
-    location.pathname === "/notifications";
+    location.pathname === "/notifications" ||
+    location.pathname === "/login" ||
+    location.pathname === "/signup";
 
   useEffect(() => {
     checkAuth();

@@ -1,7 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { useAuthStore } from "../store/useAuthStore";
-import { MessageCircleIcon, MailIcon, LoaderIcon, LockIcon, UserIcon } from "lucide-react";
+import {
+  MessageCircleIcon,
+  MailIcon,
+  LoaderIcon,
+  LockIcon,
+  UserIcon,
+  ChevronUpIcon,
+} from "lucide-react";
 import toast from "react-hot-toast";
+import PrivacySection from "./PrivacySection";
+import FeaturesSlider from "./FeaturesSlider";
+import SecurityShowcaseSection from "./SecurityShowcaseSection";
 
 const loginFields = [
   {
@@ -103,10 +114,14 @@ const validateSignup = ({ fullName, email, password }) => {
 };
 
 function LoginPage({ initialMode = "signin" }) {
+  const navigate = useNavigate();
   const [isSignup, setIsSignup] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [formData, setFormData] = useState({ fullName: "", email: "", password: "" });
   const [errors, setErrors] = useState({});
+  const [showFloatingSignup, setShowFloatingSignup] = useState(false);
+  const firstSectionRef = useRef(null);
+  const usernameInputRef = useRef(null);
   const { login, signup, isLoggingIn, isSigningUp } = useAuthStore();
   const activeFields = isSignup ? signupFields : loginFields;
   const isSubmitting = isSignup ? isSigningUp : isLoggingIn;
@@ -144,6 +159,7 @@ function LoginPage({ initialMode = "signin" }) {
   const handleSwitchMode = () => {
     setIsSignup((prev) => !prev);
     setErrors({});
+    setFormData({ fullName: "", email: "", password: "" });
   };
 
   useEffect(() => {
@@ -159,10 +175,64 @@ function LoginPage({ initialMode = "signin" }) {
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (!firstSectionRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowFloatingSignup(!entry.isIntersecting);
+      },
+      { threshold: 0.15 }
+    );
+
+    observer.observe(firstSectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleFloatingSignupClick = () => {
+    navigate("/signup");
+    setIsSignup(true);
+    setErrors({});
+    setFormData({ fullName: "", email: "", password: "" });
+
+    firstSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    setTimeout(() => {
+      usernameInputRef.current?.focus();
+    }, 450);
+  };
+
+  const handleScrollToFirstSection = () => {
+    firstSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="auth-screen h-screen w-screen">
-      <div className="auth-shell h-full w-full overflow-hidden">
-        <div className="flex h-full w-full flex-col md:flex-row">
+    <div className="auth-screen-wrapper w-full">
+      {showFloatingSignup && (
+        <button
+          type="button"
+          onClick={handleFloatingSignupClick}
+          className="fixed right-5 top-5 z-50 rounded-xl border border-cyan-300/40 bg-slate-900/70 px-5 py-2.5 text-sm font-semibold tracking-wide text-cyan-200 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-slate-800/80 hover:text-white"
+        >
+          Sign Up
+        </button>
+      )}
+
+      {showFloatingSignup && (
+        <button
+          type="button"
+          onClick={handleScrollToFirstSection}
+          className="fixed bottom-6 right-6 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-300/45 bg-slate-900/75 text-cyan-200 shadow-[0_10px_28px_rgba(6,182,212,0.25)] backdrop-blur-md transition hover:-translate-y-1 hover:bg-slate-800/85 hover:text-white"
+          aria-label="Back to top"
+        >
+          <ChevronUpIcon className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* Login Section - Full Viewport Height */}
+      <div ref={firstSectionRef} className="auth-screen h-screen w-full flex items-center justify-center">
+        <div className="auth-shell h-full w-full overflow-hidden">
+          <div className="flex h-full w-full flex-col md:flex-row">
           <aside className="auth-info-panel hidden h-full md:flex md:w-3/5">
             <div className="relative z-10 mx-auto flex h-full w-full max-w-3xl flex-col justify-between px-10 py-16 xl:px-16">
               <div>
@@ -226,6 +296,7 @@ function LoginPage({ initialMode = "signin" }) {
                         <Icon className="auth-light-icon" />
                         <input
                           type={field.type}
+                          ref={field.key === "fullName" ? usernameInputRef : null}
                           value={formData[field.key]}
                           onChange={(e) => handleFieldChange(field.key, e.target.value)}
                           className={`auth-light-input ${errors[field.key] ? "auth-light-input-error" : ""}`}
@@ -277,6 +348,16 @@ function LoginPage({ initialMode = "signin" }) {
           </section>
         </div>
       </div>
+      </div>
+
+      {/* Privacy Section */}
+      <PrivacySection />
+
+      {/* Features Slider Section */}
+      <FeaturesSlider />
+
+      {/* Security Showcase Section */}
+      <SecurityShowcaseSection />
     </div>
   );
 }

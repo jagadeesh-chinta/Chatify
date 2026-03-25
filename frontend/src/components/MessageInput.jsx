@@ -3,23 +3,103 @@ import useKeyboardSound from "../hooks/useKeyboardSound";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import toast from "react-hot-toast";
-import { ImageIcon, SendIcon, XIcon, Undo2Icon, MicIcon, ClockIcon } from "lucide-react";
+import { ImageIcon, SendIcon, XIcon, Undo2Icon, MicIcon, ClockIcon, PaperclipIcon, FileAudio2, FileText } from "lucide-react";
 import { getPreferredRecognitionLanguage } from "../lib/languageDetection";
+
+const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_AUDIO_PDF_SIZE_BYTES = 100 * 1024 * 1024;
+const DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".csv", ".rtf", ".odt", ".ods", ".odp"];
+const DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "text/csv",
+  "application/rtf",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
+]);
+
+const hasAllowedDocumentExtension = (fileName = "") => {
+  const lowered = fileName.toLowerCase();
+  return DOCUMENT_EXTENSIONS.some((ext) => lowered.endsWith(ext));
+};
+
+const formatFileSize = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+};
+
+const formatDuration = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remaining = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
+};
+
+const extractMediaDuration = (file, mediaElementType) =>
+  new Promise((resolve) => {
+    const mediaUrl = URL.createObjectURL(file);
+    const element = document.createElement(mediaElementType);
+    element.preload = "metadata";
+    element.src = mediaUrl;
+
+    const cleanup = () => {
+      element.onloadedmetadata = null;
+      element.onerror = null;
+      URL.revokeObjectURL(mediaUrl);
+    };
+
+    element.onloadedmetadata = () => {
+      const duration = Number.isFinite(element.duration) ? element.duration : null;
+      cleanup();
+      resolve(duration);
+    };
+
+    element.onerror = () => {
+      cleanup();
+      resolve(null);
+    };
+  });
 
 function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaType, setMediaType] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState("");
+  const [mediaFileName, setMediaFileName] = useState("");
+  const [mediaFileSize, setMediaFileSize] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(null);
 
   const fileInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
   const inputRef = useRef(null);
   const undoTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const schedulerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (mediaPreview) {
+        URL.revokeObjectURL(mediaPreview);
+      }
+    };
+  }, [mediaPreview]);
 
   // --- Speech Recognition Setup with Auto Language Detection ---
   useEffect(() => {
@@ -88,6 +168,8 @@ function MessageInput() {
   const {
     sendMessage,
     isSoundEnabled,
+    isUploadingMedia,
+    mediaUploadProgress,
     selectedUser,
     editingMessage,
     setEditingMessage,
@@ -213,7 +295,7 @@ function MessageInput() {
       return;
     }
 
-    if (!text.trim() && !imagePreview) return;
+    if (!text.trim() && !imagePreview && !mediaFile) return;
 
     // Validate scheduled time if set
     if (scheduledDateTime) {
@@ -230,6 +312,12 @@ function MessageInput() {
     sendMessage({
       text: text.trim(),
       image: imagePreview,
+      mediaFile,
+      type: mediaType,
+      fileUrl: mediaPreview,
+      fileName: mediaFileName,
+      fileSize: mediaFileSize,
+      duration: mediaDuration,
       scheduledAt: scheduledDateTime ? new Date(scheduledDateTime).toISOString() : null,
     });
 
@@ -238,26 +326,110 @@ function MessageInput() {
 
     setText("");
     setImagePreview("");
+    setMediaFile(null);
+    setMediaType(null);
+    setMediaFileName("");
+    setMediaFileSize(0);
+    setMediaDuration(null);
+    if (mediaPreview) {
+      URL.revokeObjectURL(mediaPreview);
+      setMediaPreview(null);
+    }
     setScheduledDateTime("");
     setShowScheduler(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
+    if (!file) return;
+
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
+
+    if (mediaPreview) {
+      URL.revokeObjectURL(mediaPreview);
+    }
+    setMediaPreview(null);
+    setMediaFile(null);
+    setMediaType(null);
+    setMediaFileName("");
+    setMediaFileSize(0);
+    setMediaDuration(null);
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
 
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
   };
 
+  const handleMediaChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isMp4 = file.type === "video/mp4";
+    const isMp3 = file.type === "audio/mpeg" || file.type === "audio/mp3";
+    const isPdf = file.type === "application/pdf";
+    const isDocument = isPdf || DOCUMENT_MIME_TYPES.has(file.type) || hasAllowedDocumentExtension(file.name);
+
+    if (!isMp4 && !isMp3 && !isDocument) {
+      toast.error("Only MP4, MP3, and document files are allowed");
+      return;
+    }
+
+    if (isMp4 && file.size > MAX_VIDEO_SIZE_BYTES) {
+      toast.error("Video size must be less than 50MB");
+      return;
+    }
+
+    if ((isMp3 || isDocument) && file.size > MAX_AUDIO_PDF_SIZE_BYTES) {
+      toast.error("Audio/Document size must be less than 100MB");
+      return;
+    }
+
+    if (mediaPreview) {
+      URL.revokeObjectURL(mediaPreview);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    let extractedDuration = null;
+    if (isMp4) {
+      extractedDuration = await extractMediaDuration(file, "video");
+    } else if (isMp3) {
+      extractedDuration = await extractMediaDuration(file, "audio");
+    }
+
+    setMediaFile(file);
+    setMediaType(isMp4 ? "video" : isMp3 ? "audio" : isPdf ? "pdf" : "document");
+    setMediaFileName(file.name || "attachment");
+    setMediaFileSize(file.size || 0);
+    setMediaDuration(extractedDuration);
+    setMediaPreview(objectUrl);
+
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const removeImage = () => {
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeMedia = () => {
+    if (mediaPreview) {
+      URL.revokeObjectURL(mediaPreview);
+    }
+
+    setMediaPreview(null);
+    setMediaFile(null);
+    setMediaType(null);
+    setMediaFileName("");
+    setMediaFileSize(0);
+    setMediaDuration(null);
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
 
   return (
@@ -323,6 +495,41 @@ function MessageInput() {
         </div>
       )}
 
+      {mediaPreview && mediaType && (
+        <div className="w-full mb-3 flex items-center">
+          <div className="relative w-full max-w-xs rounded-lg border border-white/20 p-2 chat-glass">
+            {mediaType === "video" ? (
+              <video
+                controls
+                src={mediaPreview}
+                className="w-full max-h-36 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="flex items-center gap-2 px-1 py-1">
+                <div className="w-8 h-8 rounded-md bg-slate-800/80 border border-white/10 flex items-center justify-center">
+                  {mediaType === "audio" ? <FileAudio2 className="w-4 h-4 text-cyan-300" /> : <FileText className="w-4 h-4 text-cyan-300" />}
+                </div>
+              </div>
+            )}
+            <div className="mt-2 min-w-0 px-1">
+              <p className="text-sm text-slate-100 truncate">{mediaFileName || (mediaType === "pdf" || mediaType === "document" ? "document.file" : mediaType === "video" ? "video.mp4" : "audio.mp3")}</p>
+              <p className="text-[11px] text-slate-400 uppercase tracking-wide">{mediaType} file</p>
+              <p className="text-[11px] text-slate-400">
+                {formatFileSize(mediaFileSize) || "Size unavailable"}
+                {(mediaType === "video" || mediaType === "audio") && mediaDuration ? ` | Duration: ${formatDuration(mediaDuration)}` : ""}
+              </p>
+            </div>
+            <button
+              onClick={removeMedia}
+              className="absolute -top-2 -right-2 w-6 h-6 rounded-full chat-glass-strong flex items-center justify-center text-slate-200 hover:bg-white/10"
+              type="button"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {text.trim().length > 0 && !editingMessage && (
         <div className="mb-2 ml-1 text-xs chat-text-muted flex items-center gap-2">
           Typing
@@ -331,6 +538,12 @@ function MessageInput() {
             <span />
             <span />
           </span>
+        </div>
+      )}
+
+      {isUploadingMedia && (
+        <div className="mb-2 ml-1 text-[11px] text-cyan-300/90 flex items-center gap-2">
+          Uploading media {mediaUploadProgress}%
         </div>
       )}
 
@@ -356,6 +569,14 @@ function MessageInput() {
           className="hidden"
         />
 
+        <input
+          type="file"
+          accept="video/mp4,audio/mpeg,audio/mp3,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,application/rtf,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.rtf,.odt,.ods,.odp"
+          ref={mediaInputRef}
+          onChange={handleMediaChange}
+          className="hidden"
+        />
+
         <div className="flex gap-1 md:gap-0">
           <button
             type="button"
@@ -365,6 +586,16 @@ function MessageInput() {
             }`}
           >
             <ImageIcon className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => mediaInputRef.current?.click()}
+            className={`ripple-btn chat-btn chat-glass text-slate-400 hover:text-slate-200 rounded-xl px-3 md:px-4 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${
+              mediaPreview ? "text-cyan-500" : ""
+            }`}
+            title="Attach MP4, MP3, or document"
+          >
+            <PaperclipIcon className="w-5 h-5" />
           </button>
           <button
             type="button"
@@ -438,7 +669,7 @@ function MessageInput() {
 
           <button
             type="submit"
-            disabled={!text.trim() && !imagePreview}
+            disabled={(!text.trim() && !imagePreview && !mediaFile) || isUploadingMedia}
             className="ripple-btn chat-btn bg-gradient-to-r from-[#00c6ff] to-[#00ffcc] text-[#032027] rounded-xl px-3 md:px-4 py-2 font-semibold hover:from-[#1bd0ff] hover:to-[#30ffd8] transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center shadow-[0_10px_24px_rgba(0,198,255,0.35)]"
           >
             <SendIcon className="w-5 h-5" />
