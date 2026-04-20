@@ -7,10 +7,11 @@ import Message from "../models/Message.js";
 
 const app = express();
 const server = http.createServer(app);
+const CLIENT_ORIGIN = ENV.CLIENT_URL || "https://chatify-web-alpha.vercel.app";
 
 const io = new Server(server, {
   cors: {
-    origin: [ENV.CLIENT_URL],
+    origin: [CLIENT_ORIGIN],
     credentials: true,
   },
 });

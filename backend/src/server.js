@@ -18,11 +18,12 @@ import { startMessageScheduler } from "./services/scheduler.service.js";
 
 const __dirname = path.resolve();
 
-const PORT = ENV.PORT || 3000;
+const PORT = process.env.PORT || 5000;
+const CLIENT_ORIGIN = ENV.CLIENT_URL || "https://chatify-web-alpha.vercel.app";
 
 app.use(express.json({limit: "5mb"})); //req.body
 app.use(cors({
-  origin: ENV.CLIENT_URL,
+  origin: CLIENT_ORIGIN,
   credentials: true
 }));
 app.use(cookieParser()); //req.cookies

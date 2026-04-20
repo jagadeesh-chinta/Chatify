@@ -3,7 +3,8 @@ import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 
-const BASE_URL = "https://chatify-app-v7ci.onrender.com";
+const API_URL = import.meta.env.VITE_API_URL || "https://chatify-app-v7ci.onrender.com";
+const BASE_URL = API_URL.replace(/\/$/, "");
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -49,12 +50,21 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoggingIn: true });
     try {
       const res = await axiosInstance.post("/auth/login", data);
+      console.log("[FRONTEND_LOGIN] API response", {
+        status: res?.status,
+        data: res?.data,
+      });
       set({ authUser: res.data });
       sessionStorage.setItem("chatifyShowWelcome", "1");
       toast.success("Logged in successfully");
       get().connectSocket();
     } catch (error) {
       const message = error?.response?.data?.message || "Unable to log in right now";
+      console.error("[FRONTEND_LOGIN] API error", {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message,
+      });
       toast.error(message);
       console.log("Login error:", error);
     } finally {

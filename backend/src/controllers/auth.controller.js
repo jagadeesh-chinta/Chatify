@@ -59,6 +59,14 @@ export const login = async (req,res) => {
     const { email, password } = req.body;
     const normalizedEmail = normalizeEmail(email);
 
+    // Debug login requests in production without logging secrets.
+    console.log("[AUTH_LOGIN] request", {
+        email: normalizedEmail || null,
+        hasPassword: Boolean(password),
+        origin: req.headers.origin || null,
+        userAgent: req.headers["user-agent"] || null,
+    });
+
     if(!normalizedEmail || !password)
     {
         return res.status(400).json({message: "Email and password are required"});
@@ -66,12 +74,20 @@ export const login = async (req,res) => {
 
     try {
         const user = await User.findOne({email: normalizedEmail});
-        if(!user) return res.status(400).json({message:"Invalid credentials"});
+        if(!user) {
+            console.warn("[AUTH_LOGIN] user not found", { email: normalizedEmail });
+            return res.status(400).json({message:"Invalid credentials"});
+        }
 
         const isPasswordCorrect = await bcrypt.compare(password, user.password);
-        if(!isPasswordCorrect) return res.status(400).json({message:"Invalid credentials"});
+        if(!isPasswordCorrect) {
+            console.warn("[AUTH_LOGIN] invalid password", { email: normalizedEmail });
+            return res.status(400).json({message:"Invalid credentials"});
+        }
 
         generateToken(user._id, res);
+
+        console.log("[AUTH_LOGIN] success", { userId: user._id.toString(), email: user.email });
         
         res.status(200).json({
             _id: user._id,
@@ -82,8 +98,12 @@ export const login = async (req,res) => {
         });
     } 
     catch (error) {
-        console.log("Error in login controller:", error);
-        res.status(500).json({message: "Internal server error"});
+        console.error("[AUTH_LOGIN] unexpected error", {
+            email: normalizedEmail,
+            message: error?.message,
+            stack: error?.stack,
+        });
+        res.status(500).json({message: "Login failed. Please try again."});
     }
 };
 
