@@ -1,7 +1,7 @@
 import {ENV} from '../lib/env.js';
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
-import { generateToken } from '../lib/utils.js';
+import { authCookieOptions, generateToken } from '../lib/utils.js';
 import cloudinary from '../lib/cloudinary.js';
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
@@ -108,7 +108,10 @@ export const login = async (req,res) => {
 };
 
 export const logout = (_,res) => {
-    res.cookie("jwt","",{maxAge:0});
+    res.cookie("jwt", "", {
+        ...authCookieOptions,
+        maxAge: 0,
+    });
     res.status(200).json({message: "Logged out successfully"});
 };
 

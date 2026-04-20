@@ -1,6 +1,16 @@
 import jwt from 'jsonwebtoken';
 import {ENV} from './env.js';
 
+const isProduction = ENV.NODE_ENV === "production";
+
+export const authCookieOptions = {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
+    secure: isProduction,
+};
+
 export const generateToken = (userId, res) =>
 {
     const {JWT_SECRET} = ENV;
@@ -10,12 +20,6 @@ export const generateToken = (userId, res) =>
     const token = jwt.sign({userId}, JWT_SECRET, {
         expiresIn:"7d"
     });
-    res.cookie("jwt", token, {
-        maxAge: 7*24*60*60*1000,
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "development" ? false : true,
-    });
+    res.cookie("jwt", token, authCookieOptions);
     return token;
 };
