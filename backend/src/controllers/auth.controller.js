@@ -2,12 +2,12 @@ import {ENV} from '../lib/env.js';
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import { generateToken } from '../lib/utils.js';
-import {sendWelcomeEmail} from '../emails/emailHandlers.js';
 import cloudinary from '../lib/cloudinary.js';
 
+const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 
 export const signup = async (req,res)=>{
-    const {fullName, email, password} = req.body;
+    const {fullName, email, password, phoneNumber} = req.body;
     try {
         if(!fullName || !email || !password){
             return res.status(400).json({message: "All fields are required"});
@@ -28,22 +28,18 @@ export const signup = async (req,res)=>{
         const newUser = new User({
             fullName,
             email,
+            phoneNumber: phoneNumber || "",
             password: hashedPassword
         });
         if(newUser){
             const savedUser = await newUser.save();
-            generateToken(savedUser._id, res);
-            
-            try {
-                await sendWelcomeEmail(savedUser.email, savedUser.fullName, ENV.CLIENT_URL);
-            } catch (error) {
-                console.error("Failed to send welcome email:", error);
-            }
-
             return res.status(201).json({
+                success: true,
+                message: "Account created successfully. Please log in.",
                 _id: savedUser._id,
                 fullName: savedUser.fullName,
-                email: savedUser.email,
+                ehoneNumber: savedUser.phoneNumber,
+                pmail: savedUser.email,
                 profilePic: savedUser.profilePic,
                 createdAt: savedUser.createdAt,
             });
@@ -60,20 +56,23 @@ export const signup = async (req,res)=>{
 };
 
 export const login = async (req,res) => {
-    const {email, password} = req.body;
-    if(!email || !password)
+    const { email, password } = req.body;
+    const normalizedEmail = normalizeEmail(email);
+
+    if(!normalizedEmail || !password)
     {
         return res.status(400).json({message: "Email and password are required"});
     }
 
     try {
-        const user = await User.findOne({email});
-        if(!user) return res.status(400).json({message:"Invalid credentails"});
+        const user = await User.findOne({email: normalizedEmail});
+        if(!user) return res.status(400).json({message:"Invalid credentials"});
 
         const isPasswordCorrect = await bcrypt.compare(password, user.password);
         if(!isPasswordCorrect) return res.status(400).json({message:"Invalid credentials"});
 
         generateToken(user._id, res);
+        
         res.status(200).json({
             _id: user._id,
             fullName: user.fullName,

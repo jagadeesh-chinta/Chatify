@@ -32,14 +32,14 @@ export const useAuthStore = create((set, get) => ({
     set({ isSigningUp: true });
     try {
       const res = await axiosInstance.post("/auth/signup", data);
-      set({ authUser: res.data });
-
-      toast.success("Account created successfully!");
-      get().connectSocket();
+      set({ authUser: null });
+      toast.success(res?.data?.message || "Account created successfully! Please sign in.");
+      return true;
     } catch (error) {
       const message = error?.response?.data?.message || "Unable to sign up right now";
       toast.error(message);
       console.log("Signup error:", error);
+      return false;
     } finally {
       set({ isSigningUp: false });
     }
@@ -51,9 +51,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/login", data);
       set({ authUser: res.data });
       sessionStorage.setItem("chatifyShowWelcome", "1");
-
       toast.success("Logged in successfully");
-
       get().connectSocket();
     } catch (error) {
       const message = error?.response?.data?.message || "Unable to log in right now";
