@@ -54,6 +54,52 @@ export const updateUsername = async (req, res) => {
 };
 
 /**
+ * Update phone number
+ * PUT /user/update-phone
+ */
+export const updatePhoneNumber = async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+        const userId = req.user._id;
+
+        if (!phoneNumber || !phoneNumber.trim()) {
+            return res.status(400).json({ message: "Phone number cannot be empty" });
+        }
+
+        const trimmedPhone = phoneNumber.trim();
+
+        // Check if phone number is unique
+        const existingUser = await User.findOne({
+            phoneNumber: trimmedPhone,
+            _id: { $ne: userId }
+        });
+
+        if (existingUser) {
+            return res.status(400).json({ message: "Phone number already in use" });
+        }
+
+        // Update phone number
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { phoneNumber: trimmedPhone },
+            { new: true }
+        ).select('-password -chatKeyPassword');
+
+        res.status(200).json({
+            _id: updatedUser._id,
+            fullName: updatedUser.fullName,
+            email: updatedUser.email,
+            phoneNumber: updatedUser.phoneNumber,
+            profilePic: updatedUser.profilePic,
+            createdAt: updatedUser.createdAt,
+        });
+    } catch (error) {
+        console.log("Error in updatePhoneNumber controller:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+/**
  * Change password
  * PUT /user/change-password
  */

@@ -47,6 +47,7 @@ const getMediaTypeFromUrl = (url) => {
 };
 
 const getMessagePreviewText = (message) => {
+  if (message.deliveryMode === "voice" && message.text) return "(Voice message)";
   if (message.text) return message.text;
   if (message.type === "image" || message.image) return "(Image)";
   if (message.type === "video" || /\.mp4(\?|$)/i.test(message.fileUrl || "")) return "(Video)";
@@ -169,10 +170,20 @@ export const searchUsers = async (req, res) => {
       return res.status(200).json([]);
     }
 
-    // Case-insensitive search by fullName
+    const digitsOnly = query.trim().replace(/\D/g, "");
+    
+    const searchConditions = [
+      { fullName: { $regex: query.trim(), $options: "i" } }
+    ];
+
+    if (digitsOnly.length > 0) {
+      searchConditions.push({ phoneNumber: { $regex: digitsOnly, $options: "i" } });
+    }
+
+    // Case-insensitive search by fullName or phoneNumber
     const users = await User.find({
       _id: { $ne: loggedInUserId },
-      fullName: { $regex: query.trim(), $options: "i" },
+      $or: searchConditions
     })
       .select("-password")
       .limit(20);
@@ -213,7 +224,24 @@ export const getMessagesByUserId = async (req, res) => {
       ],
     });
 
-    res.status(200).json({ messages, isDeleted: false });
+    const { default: ChatPreference } = await import("../models/ChatPreference.js");
+    const receiverPreference = await ChatPreference.findOne({ user: userToChatId, otherUser: myId });
+    const maskReadReceipts = receiverPreference && receiverPreference.readReceiptsEnabled === false;
+
+    let finalMessages = messages;
+    if (maskReadReceipts) {
+      finalMessages = messages.map(msg => {
+        if (msg.senderId.toString() === myId.toString() && msg.isRead) {
+          const msgObj = msg.toObject();
+          msgObj.isRead = false;
+          msgObj.readAt = null;
+          return msgObj;
+        }
+        return msg;
+      });
+    }
+
+    res.status(200).json({ messages: finalMessages, isDeleted: false });
   } catch (error) {
     console.log("Error in getMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
@@ -222,7 +250,7 @@ export const getMessagesByUserId = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image, scheduledAt, type, fileUrl, fileName, fileSize, duration, thumbnailUrl } = req.body;
+    const { text, image, scheduledAt, type, fileUrl, fileName, fileSize, duration, thumbnailUrl, deliveryMode } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
@@ -267,6 +295,7 @@ export const sendMessage = async (req, res) => {
 
     let imageUrl;
     let messageType = "text";
+    const resolvedDeliveryMode = deliveryMode === "voice" ? "voice" : "text";
 
     if (image) {
       // upload base64 image to cloudinary
@@ -289,6 +318,10 @@ export const sendMessage = async (req, res) => {
       messageType = "text";
     }
 
+    if (resolvedDeliveryMode === "voice" && messageType !== "text") {
+      return res.status(400).json({ message: "Voice delivery is only supported for plain text messages." });
+    }
+
     const parsedFileSize = Number(fileSize);
     const parsedDuration = Number(duration);
 
@@ -296,6 +329,7 @@ export const sendMessage = async (req, res) => {
       senderId,
       receiverId,
       text,
+      deliveryMode: resolvedDeliveryMode,
       image: imageUrl,
       type: messageType,
       fileUrl: fileUrl || undefined,
@@ -326,6 +360,71 @@ export const sendMessage = async (req, res) => {
   }
 };
 
+/**
+ * Get Last Messages - Fast endpoint to fetch the last message for a given list of user IDs.
+ * Accepts a comma-separated list of user IDs via query parameter 'userIds' or returns for all contacts.
+ */
+export const getLastMessages = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    let { userIds } = req.query;
+    
+    let targetUserIds = [];
+    if (userIds) {
+      targetUserIds = userIds.split(",").map(id => id.trim()).filter(Boolean);
+    } else {
+      // If no specific users requested, fetch last messages for all friends
+      const friendRecords = await Friend.find({
+        $or: [{ user1: myId }, { user2: myId }],
+      });
+      targetUserIds = friendRecords.map((record) =>
+        record.user1.toString() === myId.toString() ? record.user2.toString() : record.user1.toString()
+      );
+    }
+
+    if (targetUserIds.length === 0) {
+      return res.status(200).json({});
+    }
+
+    // Get deleted chats to exclude messages from them
+    const deletedChats = await DeletedChat.find({ userId: myId });
+    const deletedUserIds = new Set(deletedChats.map((dc) => dc.deletedUserId.toString()));
+
+    const activeUserIds = targetUserIds.filter(id => !deletedUserIds.has(id));
+
+    if (activeUserIds.length === 0) {
+      return res.status(200).json({});
+    }
+
+    // Fetch the absolute latest message for each active user using Promise.all
+    // This is perfectly reliable and very fast.
+    const result = {};
+    
+    await Promise.all(activeUserIds.map(async (otherIdStr) => {
+      const lastMsg = await Message.findOne({
+        $or: [
+          { senderId: myId, receiverId: otherIdStr },
+          { senderId: otherIdStr, receiverId: myId }
+        ],
+        status: "sent"
+      }).sort({ createdAt: -1 });
+
+      if (lastMsg) {
+        const prefix = lastMsg.senderId.toString() === myId.toString() ? "You: " : "";
+        result[otherIdStr] = {
+          text: prefix + getMessagePreviewText(lastMsg),
+          createdAt: lastMsg.createdAt
+        };
+      }
+    }));
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error in getLastMessages controller:", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const getChatPartners = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
@@ -345,7 +444,7 @@ export const getChatPartners = async (req, res) => {
       ),
     ];
 
-    const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password");
+    const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password -email -phoneNumber -chatKeyPassword");
 
     res.status(200).json(chatPartners);
   } catch (error) {
@@ -568,6 +667,7 @@ export const getUnreadCounts = async (req, res) => {
           _id: "$senderId",
           count: { $sum: 1 },
           lastMessage: { $last: "$text" },
+          lastDeliveryMode: { $last: "$deliveryMode" },
           lastType: { $last: "$type" },
           lastImage: { $last: "$image" },
           lastFileUrl: { $last: "$fileUrl" },
@@ -582,6 +682,7 @@ export const getUnreadCounts = async (req, res) => {
       unreadCount: item.count,
       lastMessage: getMessagePreviewText({
         text: item.lastMessage,
+        deliveryMode: item.lastDeliveryMode,
         type: item.lastType,
         image: item.lastImage,
         fileUrl: item.lastFileUrl,
@@ -626,9 +727,14 @@ export const markMessagesAsRead = async (req, res) => {
       }
     );
 
+    // Check if the current user has read receipts disabled for this chat
+    const { default: ChatPreference } = await import("../models/ChatPreference.js");
+    const preference = await ChatPreference.findOne({ user: myId, otherUser: senderId });
+    const sendReadReceipt = !(preference && preference.readReceiptsEnabled === false);
+
     // Notify sender in real-time for seen receipt updates.
     const senderSocketId = getReceiverSocketId(senderId);
-    if (senderSocketId && result.modifiedCount > 0) {
+    if (senderSocketId && result.modifiedCount > 0 && sendReadReceipt) {
       io.to(senderSocketId).emit("messages_seen", {
         senderId: senderId.toString(),
         receiverId: myId.toString(),

@@ -1,14 +1,26 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { useChatStore } from "../store/useChatStore";
 import UsersLoadingSkeleton from "./UsersLoadingSkeleton";
 import NoChatsFound from "./NoChatsFound";
 import { useAuthStore } from "../store/useAuthStore";
 import { axiosInstance } from "../lib/axios";
 
+import { useShallow } from "zustand/react/shallow";
+
 function ChatsList() {
-  const { getFavourites, chats, isUsersLoading, setSelectedUser, unreadCounts, selectedUser } = useChatStore();
+  const navigate = useNavigate();
+  const { getFavourites, chats, isUsersLoading, setSelectedUser, unreadCounts, selectedUser, globalLastMessages, fetchGlobalLastMessages } = useChatStore(useShallow(state => ({
+    getFavourites: state.getFavourites,
+    chats: state.chats,
+    isUsersLoading: state.isUsersLoading,
+    setSelectedUser: state.setSelectedUser,
+    unreadCounts: state.unreadCounts,
+    selectedUser: state.selectedUser,
+    globalLastMessages: state.globalLastMessages,
+    fetchGlobalLastMessages: state.fetchGlobalLastMessages
+  })));
   const { onlineUsers } = useAuthStore();
-  const [lastMessages, setLastMessages] = useState({});
 
   useEffect(() => {
     getFavourites();
@@ -16,27 +28,11 @@ function ChatsList() {
 
   // Fetch last message for each favourite
   useEffect(() => {
-    const fetchLastMessages = async () => {
-      const messages = {};
-      for (const chat of chats) {
-        try {
-          const res = await axiosInstance.get(`/messages/${chat._id}`);
-          // Handle both array format and { messages, isDeleted } format
-          const messagesArray = res.data.messages || res.data;
-          if (Array.isArray(messagesArray) && messagesArray.length > 0) {
-            messages[chat._id] = messagesArray[messagesArray.length - 1];
-          }
-        } catch (error) {
-          console.log("Error fetching messages for", chat._id);
-        }
-      }
-      setLastMessages(messages);
-    };
-
     if (chats.length > 0) {
-      fetchLastMessages();
+      const userIds = chats.map(chat => chat._id);
+      fetchGlobalLastMessages(userIds);
     }
-  }, [chats]);
+  }, [chats, fetchGlobalLastMessages]);
 
   if (isUsersLoading) return <UsersLoadingSkeleton />;
   if (chats.length === 0) return <NoChatsFound />;
@@ -44,32 +40,35 @@ function ChatsList() {
   return (
     <>
       {chats.map((chat) => {
-        const lastMessage = lastMessages[chat._id];
+        const lastMessage = globalLastMessages[chat._id];
         const unreadData = unreadCounts[chat._id];
         const unreadCount = unreadData?.count || 0;
         
-        // Use unread data's last message if available (more recent)
-        const messagePreview = unreadData?.lastMessage 
-          ? unreadData.lastMessage 
-          : lastMessage
-            ? lastMessage.text || "(Image)"
-            : "No messages yet";
+        let messagePreview = "No messages yet";
+        if (lastMessage && lastMessage.text) {
+          messagePreview = lastMessage.text;
+        }
 
         return (
           <div
             key={chat._id}
-            className={`chat-list-item p-3 md:p-4 rounded-xl cursor-pointer min-h-[60px] ${selectedUser?._id === chat._id ? "chat-list-item-active" : ""}`}
-            onClick={() => setSelectedUser(chat)}
+            className={`chat-list-item p-2 md:p-3 rounded-lg cursor-pointer min-h-[48px] ${selectedUser?._id === chat._id ? "chat-list-item-active" : ""}`}
+            onClick={() => {
+              setSelectedUser(chat);
+              if (window.location.pathname !== "/") {
+                navigate("/");
+              }
+            }}
           >
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-3">
               <div className={`avatar ${onlineUsers.includes(chat._id) ? "online" : "offline"}`}>
-                <div className="size-10 md:size-12 rounded-full">
+                <div className="size-9 md:size-10 rounded-full">
                   <img src={chat.profilePic || "/avatar.png"} alt={chat.fullName} />
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-slate-200 font-medium truncate text-sm md:text-base">{chat.fullName}</h4>
-                <p className={`text-xs md:text-sm truncate ${unreadCount > 0 ? "text-slate-200 font-medium" : "text-slate-400"}`}>
+                <h4 className="text-slate-300 font-medium truncate text-sm">{chat.fullName}</h4>
+                <p className={`text-xs truncate ${unreadCount > 0 ? "text-slate-200 font-medium" : "text-slate-400"}`}>
                   {messagePreview}
                 </p>
               </div>

@@ -9,6 +9,7 @@ import ViewProfileImage from "./pages/ViewProfileImage";
 import NotificationsPage from "./pages/NotificationsPage";
 import WelcomeScreen from "./pages/WelcomeScreen";
 import RequestsPage from "./components/RequestsPage";
+import SettingsPage from "./pages/SettingsPage";
 import { useAuthStore } from "./store/useAuthStore";
 import { useEffect } from "react";
 import PageLoader from "./components/PageLoader";
@@ -28,6 +29,7 @@ function App()
     location.pathname === "/restore-chat" ||
     location.pathname === "/notifications" ||
     location.pathname === "/login" ||
+    location.pathname === "/settings" ||
     location.pathname === "/signup";
 
   useEffect(() => {
@@ -49,13 +51,18 @@ function App()
           path="/"
           element={authUser ? (shouldShowWelcome ? <Navigate to="/welcome" replace /> : <Navigate to="/chat" replace />) : <Navigate to={"/login"}/>} 
         />
-        <Route path="/chat" element={authUser ? <ChatPage /> : <Navigate to={"/login"}/>} />
         <Route path="/welcome" element={authUser ? <WelcomeScreen /> : <Navigate to={"/login"}/>} />
-        <Route path="/restore-chat" element={authUser ? <RestoreChat /> : <Navigate to={"/login"}/>} />
-        <Route path="/chatkey" element={authUser ? <ChatKeyPage /> : <Navigate to={"/login"}/>} />
-        <Route path="/requests" element={authUser ? <RequestsPage /> : <Navigate to={"/login"}/>} />
-        <Route path="/notifications" element={authUser ? <NotificationsPage /> : <Navigate to={"/login"}/>} />
-        <Route path="/profile" element={authUser ? <ProfilePage /> : <Navigate to={"/login"}/>} />
+        {/* Render internal tools without unmounting the ChatPage layout */}
+        <Route element={authUser ? <ChatPage /> : <Navigate to={"/login"}/>}>
+          <Route path="/chat" />
+          <Route path="/restore-chat" />
+          <Route path="/chatkey" />
+          <Route path="/requests" />
+          <Route path="/notifications" />
+          <Route path="/profile" />
+          <Route path="/settings" />
+        </Route>
+        
         <Route path="/profile/crop" element={authUser ? <CropProfileImage /> : <Navigate to={"/login"}/>} />
         <Route path="/profile/view-image" element={authUser ? <ViewProfileImage /> : <Navigate to={"/login"}/>} />
         <Route path="/login" element={!authUser ? <LoginPage initialMode="signin" /> : <Navigate to={shouldShowWelcome ? "/welcome" : "/chat"} replace />} />

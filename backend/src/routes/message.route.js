@@ -1,5 +1,5 @@
 import express from "express";
-import { getAllContacts, getMessagesByUserId, sendMessage, getChatPartners, restoreChatHistory, deleteMessage, editMessage, getChatKeys, searchUsers, getUnreadCounts, markMessagesAsRead, uploadMediaFile } from "../controllers/message.controller.js";
+import { getAllContacts, getMessagesByUserId, sendMessage, getChatPartners, restoreChatHistory, deleteMessage, editMessage, getChatKeys, searchUsers, getUnreadCounts, markMessagesAsRead, uploadMediaFile, getLastMessages } from "../controllers/message.controller.js";
 import {protectRoute} from "../middleware/auth.middleware.js";
 import { arcjetProtection } from "../middleware/arcjet.middleware.js";
 import { uploadMedia, validateMediaFileSize } from "../middleware/upload.middleware.js";
@@ -9,6 +9,7 @@ router.use(arcjetProtection,protectRoute); // Apply authentication middleware to
 
 router.get("/contacts", getAllContacts);
 router.get("/chats", getChatPartners);
+router.get("/last-messages", getLastMessages);
 router.get("/chatkeys", getChatKeys);
 router.get("/search", searchUsers); // Search all users by username
 router.get("/unread-counts", getUnreadCounts); // Get unread message counts

@@ -8,9 +8,9 @@ import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import FriendRequestBlock from "./FriendRequestBlock";
 import MessageContextMenu from "./MessageContextMenu";
 import RemoveFriendConfirmation from "./RemoveFriendConfirmation";
-import ViewUserProfile from "./ViewUserProfile";
+import ChatSettings from "./ChatSettings";
 import ScreenshotOverlay from "./ScreenshotOverlay";
-import { RotateCcw, Volume2, Clock, Download, CheckCircle2, FileVideo2, FileAudio2, FileText, ExternalLink, Save, Loader2 } from "lucide-react";
+import { RotateCcw, Volume2, Clock, Download, CheckCircle2, FileVideo2, FileAudio2, FileText, ExternalLink, Save, Loader2, Pause, Play } from "lucide-react";
 import { useNavigate } from "react-router";
 import toast from "react-hot-toast";
 import { detectLanguage, getVoiceForLanguage } from "../lib/languageDetection";
@@ -39,6 +39,9 @@ const DOCUMENT_MIME_TYPES = new Set([
 ]);
 const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
 const MAX_AUDIO_DOCUMENT_SIZE_BYTES = 100 * 1024 * 1024;
+const VOICE_RATE_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.75, 2];
+
+import { useShallow } from "zustand/react/shallow";
 
 const formatFileSize = (bytes) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "";
@@ -118,7 +121,27 @@ function ChatContainer() {
     removeFriend,
     sendMessage,
     isUploadingMedia,
-  } = useChatStore();
+    getChatPreference,
+    chatPreference,
+  } = useChatStore(useShallow(state => ({
+    selectedUser: state.selectedUser,
+    getMessagesByUserId: state.getMessagesByUserId,
+    messages: state.messages,
+    isMessagesLoading: state.isMessagesLoading,
+    subscribeToMessages: state.subscribeToMessages,
+    unsubscribeFromMessages: state.unsubscribeFromMessages,
+    friendStatus: state.friendStatus,
+    fetchFriendStatus: state.fetchFriendStatus,
+    deleteForMe: state.deleteForMe,
+    deleteForEveryone: state.deleteForEveryone,
+    setEditingMessage: state.setEditingMessage,
+    isChatDeleted: state.isChatDeleted,
+    removeFriend: state.removeFriend,
+    sendMessage: state.sendMessage,
+    isUploadingMedia: state.isUploadingMedia,
+    getChatPreference: state.getChatPreference,
+    chatPreference: state.chatPreference,
+  })));
   const { authUser } = useAuthStore();
 
   const messageEndRef = useRef(null);
@@ -141,6 +164,22 @@ function ChatContainer() {
   const [thumbnailLoadingMap, setThumbnailLoadingMap] = useState({});
   const [mediaDurationMap, setMediaDurationMap] = useState({});
   const [isDragOver, setIsDragOver] = useState(false);
+  const [voiceRate, setVoiceRate] = useState(() => {
+    const stored = Number(localStorage.getItem("voiceRate"));
+    return VOICE_RATE_OPTIONS.includes(stored) ? stored : 1;
+  });
+  const [voicePitch, setVoicePitch] = useState(() => {
+    const stored = Number(localStorage.getItem("voicePitch"));
+    return Number.isFinite(stored) && stored > 0 ? stored : 1;
+  });
+  const [isSpeechPaused, setIsSpeechPaused] = useState(false);
+  const activeSpeechMessageIdRef = useRef(null);
+  const activeSpeechTextRef = useRef("");
+  const speechSessionRef = useRef(0);
+
+  const getVoiceSettingsKey = useCallback(() => {
+    return authUser?._id ? `voiceSettings:${authUser._id}` : "voiceSettings:guest";
+  }, [authUser?._id]);
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
@@ -518,24 +557,32 @@ function ChatContainer() {
     };
   }, [messages, mediaDurationMap]);
 
-  // Text-to-Speech function with auto language detection
-  const speakMessage = useCallback((messageId, text) => {
+  const startSpeech = useCallback((messageId, text, options = {}) => {
     if (!window.speechSynthesis) {
       toast.error("Text-to-Speech not supported in this browser.");
       return;
     }
-
-    window.speechSynthesis.cancel();
 
     if (!text || text.trim() === "") {
       toast.error("No text to speak.");
       return;
     }
 
+    window.speechSynthesis.cancel();
+    setIsSpeechPaused(false);
+    activeSpeechTextRef.current = text;
+    const currentSpeechSession = ++speechSessionRef.current;
+
     const detectedLang = detectLanguage(text);
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = detectedLang;
+    const requestedRate = options.rate ?? voiceRate;
+    const requestedPitch = options.pitch ?? voicePitch;
+    const normalizedRate = VOICE_RATE_OPTIONS.includes(Number(requestedRate)) ? Number(requestedRate) : 1;
+    const normalizedPitch = Number.isFinite(Number(requestedPitch)) ? Number(requestedPitch) : 1;
+    utterance.rate = normalizedRate;
+    utterance.pitch = normalizedPitch;
 
     const voice = getVoiceForLanguage(detectedLang);
     if (voice) {
@@ -543,20 +590,82 @@ function ChatContainer() {
     }
 
     utterance.onstart = () => {
+      if (currentSpeechSession !== speechSessionRef.current) return;
+      activeSpeechMessageIdRef.current = messageId;
       setSpeakingMessageId(messageId);
+      setIsSpeechPaused(false);
     };
 
     utterance.onend = () => {
+      if (currentSpeechSession !== speechSessionRef.current) return;
+      activeSpeechMessageIdRef.current = null;
+      activeSpeechTextRef.current = "";
       setSpeakingMessageId(null);
+      setIsSpeechPaused(false);
     };
 
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
+      // Ignore benign interruption/cancel events from rapid replay or speed changes.
+      const benignErrors = new Set(["interrupted", "canceled", "cancelled", "aborted"]);
+      if (currentSpeechSession !== speechSessionRef.current || benignErrors.has(String(event?.error || "").toLowerCase())) {
+        return;
+      }
+      activeSpeechMessageIdRef.current = null;
+      activeSpeechTextRef.current = "";
       setSpeakingMessageId(null);
+      setIsSpeechPaused(false);
       toast.error("Failed to speak message.");
     };
 
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [voiceRate, voicePitch]);
+
+  // Text-to-Speech function with auto language detection
+  const speakMessage = useCallback((messageId, text) => {
+    if (!window.speechSynthesis) {
+      toast.error("Text-to-Speech not supported in this browser.");
+      return;
+    }
+
+    if (speakingMessageId === messageId && window.speechSynthesis.speaking) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsSpeechPaused(false);
+      } else {
+        window.speechSynthesis.pause();
+        setIsSpeechPaused(true);
+      }
+      return;
+    }
+
+    startSpeech(messageId, text);
+  }, [speakingMessageId, startSpeech]);
+
+  const replayActiveSpeechWithSettings = useCallback((nextRate, nextPitch) => {
+    if (isSpeechPaused || !window.speechSynthesis?.speaking) return;
+
+    const activeMessageId = activeSpeechMessageIdRef.current || speakingMessageId;
+    const activeText = activeSpeechTextRef.current;
+
+    if (!activeMessageId || !activeText) return;
+    startSpeech(activeMessageId, activeText, { rate: nextRate, pitch: nextPitch });
+  }, [isSpeechPaused, speakingMessageId, startSpeech]);
+
+  const cycleVoiceRate = useCallback(() => {
+    setVoiceRate((currentRate) => {
+      const currentIndex = VOICE_RATE_OPTIONS.indexOf(Number(currentRate));
+      const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+      const nextIndex = (safeIndex + 1) % VOICE_RATE_OPTIONS.length;
+      const nextRate = VOICE_RATE_OPTIONS[nextIndex];
+      replayActiveSpeechWithSettings(nextRate, voicePitch);
+      return nextRate;
+    });
+  }, [replayActiveSpeechWithSettings, voicePitch]);
+
+  const handlePitchChange = useCallback((nextPitch) => {
+    setVoicePitch(nextPitch);
+    replayActiveSpeechWithSettings(voiceRate, nextPitch);
+  }, [replayActiveSpeechWithSettings, voiceRate]);
 
   useEffect(() => {
     return () => {
@@ -567,12 +676,35 @@ function ChatContainer() {
   }, []);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(getVoiceSettingsKey());
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const storedRate = Number(parsed?.rate);
+      const storedPitch = Number(parsed?.pitch);
+      if (VOICE_RATE_OPTIONS.includes(storedRate)) {
+        setVoiceRate(storedRate);
+      }
+      if (Number.isFinite(storedPitch) && storedPitch > 0) {
+        setVoicePitch(storedPitch);
+      }
+    } catch {
+      // Ignore corrupted localStorage values and keep defaults.
+    }
+  }, [getVoiceSettingsKey]);
+
+  useEffect(() => {
+    localStorage.setItem(getVoiceSettingsKey(), JSON.stringify({ rate: voiceRate, pitch: voicePitch }));
+  }, [voiceRate, voicePitch, getVoiceSettingsKey]);
+
+  useEffect(() => {
     getMessagesByUserId(selectedUser._id);
     fetchFriendStatus && fetchFriendStatus(selectedUser._id);
+    getChatPreference && getChatPreference(selectedUser._id);
     subscribeToMessages();
 
     return () => unsubscribeFromMessages();
-  }, [selectedUser, getMessagesByUserId, subscribeToMessages, unsubscribeFromMessages, fetchFriendStatus]);
+  }, [selectedUser, getMessagesByUserId, subscribeToMessages, unsubscribeFromMessages, fetchFriendStatus, getChatPreference]);
 
   useEffect(() => {
     if (messageEndRef.current) {
@@ -701,12 +833,13 @@ function ChatContainer() {
   };
 
   if (viewingProfile) {
-    return <ViewUserProfile userId={selectedUser._id} onBack={handleBackFromProfile} />;
+    return <ChatSettings userId={selectedUser._id} initialProfile={selectedUser} onBack={handleBackFromProfile} />;
   }
 
   return (
     <div
-      className="relative flex flex-col h-full"
+      className="relative flex flex-col h-full bg-cover bg-center"
+      style={{ backgroundImage: chatPreference?.backgroundImage ? `url(${chatPreference.backgroundImage})` : 'none' }}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -733,6 +866,8 @@ function ChatContainer() {
           isBlurred ? "chat-blur" : ""
         }`}
       >
+
+
         {(() => {
           const ownSentMessages = messages.filter(
             (m) => m.senderId === authUser._id && m.status !== "scheduled"
@@ -775,6 +910,15 @@ function ChatContainer() {
                   const thumbnailSrc = mediaThumbnails[msg._id];
                   const effectiveThumbnailSrc = msg.thumbnailUrl || thumbnailSrc;
                   const isThumbnailLoading = !!thumbnailLoadingMap[msg._id];
+                  const isVoiceTextMessage =
+                    msg.deliveryMode === "voice" &&
+                    !!msg.text &&
+                    !msg.image &&
+                    !isMedia;
+                  const isVoicePlaying = speakingMessageId === msg._id && !isSpeechPaused;
+                  const waveColorClass = isOwn
+                    ? "from-slate-800/90 to-slate-600/95 dark:from-cyan-300/70 dark:to-cyan-100/95"
+                    : "from-cyan-300/70 to-cyan-100/95";
 
                   return (
                     <div
@@ -784,7 +928,7 @@ function ChatContainer() {
                       onMouseLeave={() => setHoveredMessageId(null)}
                     >
                       <div
-                        className={`chat-bubble chat-bubble-tail ${isOwn ? "chat-bubble-tail-own" : "chat-bubble-tail-other"} relative rounded-2xl ${
+                        className={`chat-bubble chat-bubble-tail ${isOwn ? "chat-bubble-tail-own" : "chat-bubble-tail-other"} relative rounded-2xl ${chatPreference?.textColor || ""} ${
                           isScheduled
                             ? "bg-amber-700/80 text-amber-100 border border-amber-500/30"
                             : isOwn
@@ -804,7 +948,7 @@ function ChatContainer() {
                           </div>
                         )}
 
-                        {!isOwn && msg.text && (hoveredMessageId === msg._id || speakingMessageId === msg._id) && (
+                        {!isOwn && msg.text && !isVoiceTextMessage && (hoveredMessageId === msg._id || speakingMessageId === msg._id) && (
                           <button
                             type="button"
                             onClick={() => speakMessage(msg._id, msg.text)}
@@ -1032,7 +1176,62 @@ function ChatContainer() {
                             )}
                           </div>
                         )}
-                        {msg.text && <p className="mt-2">{msg.text}</p>}
+                        {isVoiceTextMessage ? (
+                          <div className={`mt-2 rounded-2xl border px-3 py-2 flex items-center gap-3 transition-all duration-300 ${
+                            isVoicePlaying
+                              ? "border-cyan-300/50 bg-gradient-to-r from-cyan-500/20 via-sky-400/20 to-teal-400/20 shadow-[0_0_24px_rgba(34,211,238,0.25)]"
+                              : "border-cyan-300/20 bg-gradient-to-r from-cyan-500/10 via-sky-400/10 to-teal-400/10"
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={() => speakMessage(msg._id, msg.text)}
+                              className={`relative rounded-full p-2.5 transition-colors ${
+                                speakingMessageId === msg._id
+                                  ? "bg-cyan-400/30 text-cyan-50"
+                                  : "bg-slate-900/40 text-cyan-200 hover:bg-cyan-400/20"
+                              }`}
+                              title={isVoicePlaying ? "Pause" : "Play"}
+                            >
+                              {isVoicePlaying && (
+                                <span className="absolute inset-0 rounded-full border border-cyan-200/40 animate-ping" aria-hidden="true" />
+                              )}
+                              {isVoicePlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                            </button>
+                            <div className="min-w-0">
+                              <div className="flex items-end gap-1 h-6 mb-1" aria-hidden="true">
+                                {[2, 4, 3, 5, 3, 4, 2, 5, 3].map((level, index) => (
+                                  <span
+                                    key={`${msg._id}-wave-${index}`}
+                                    className={`w-1 rounded-full bg-gradient-to-t ${waveColorClass} transition-all duration-200 ${isVoicePlaying ? "animate-pulse" : ""}`}
+                                    style={{
+                                      height: `${level * 4}px`,
+                                      animationDelay: `${index * 80}ms`,
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-[11px] text-cyan-100/80 font-medium">
+                                  {isVoicePlaying ? "Playing" : isSpeechPaused && speakingMessageId === msg._id ? "Paused" : "Tap to play"}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={cycleVoiceRate}
+                                  className={`w-10 h-10 rounded-full border text-cyan-100 text-[10px] font-semibold flex items-center justify-center transition-colors ${
+                                    isVoicePlaying
+                                      ? "border-cyan-100/40 bg-cyan-500/30"
+                                      : "border-cyan-200/30 bg-slate-800/70 hover:bg-cyan-500/20"
+                                  }`}
+                                  title="Tap to cycle speed"
+                                >
+                                  {voiceRate}x
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : msg.text ? (
+                          <p className="mt-2">{msg.text}</p>
+                        ) : null}
 
                         <p className={`text-[11px] mt-2 opacity-85 flex items-center gap-1 ${isOwn ? "justify-end" : "justify-start"}`}>
                           {msg.status === "scheduled" && msg.isScheduled && (

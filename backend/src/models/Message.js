@@ -17,6 +17,11 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       maxlength: 2000,
     },
+    deliveryMode: {
+      type: String,
+      enum: ["text", "voice"],
+      default: "text",
+    },
     image: {
       type: String,
     },

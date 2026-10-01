@@ -28,6 +28,7 @@ const hasAllowedDocumentExtension = (fileName = "") => {
 };
 
 const getMessagePreviewText = (message) => {
+  if (message?.deliveryMode === "voice" && message?.text) return "(Voice message)";
   if (message?.text) return message.text;
   if (message?.type === "video") return "(Video)";
   if (message?.type === "audio") return "(Audio)";
@@ -56,7 +57,30 @@ export const useChatStore = create((set, get) => ({
   deletedMessageTemp: null,
   unreadCounts: {}, // { senderId: { count, lastMessage, lastMessageTime } }
   typingUsers: {}, // { [userId]: true }
-
+  chatPreference: null, // { nickname, notificationsEnabled, readReceiptsEnabled, backgroundImage, textColor }
+  isPreferenceLoading: false,
+  
+  globalLastMessages: {},
+  fetchGlobalLastMessages: async (userIds) => {
+    if (!userIds || userIds.length === 0) return;
+    try {
+      const res = await axiosInstance.get(`/messages/last-messages?userIds=${userIds.join(',')}`);
+      set((state) => ({
+        globalLastMessages: { ...state.globalLastMessages, ...(res.data || {}) }
+      }));
+    } catch (error) {
+      console.log("Error fetching last messages", error);
+    }
+  },
+  updateGlobalLastMessage: (userId, messageData) => {
+    set((state) => ({
+      globalLastMessages: {
+        ...state.globalLastMessages,
+        [userId]: messageData
+      }
+    }));
+  },
+  
   toggleSound: () => {
     localStorage.setItem("isSoundEnabled", !get().isSoundEnabled);
     set({ isSoundEnabled: !get().isSoundEnabled });
@@ -67,6 +91,18 @@ export const useChatStore = create((set, get) => ({
     set({ activeTab: tab });
   },
   setSelectedUser: async (selectedUser) => {
+    // Synchronously update the selected user to prevent race conditions during navigation
+    // Also clear messages immediately so old messages don't flash for 1 frame
+    set({ 
+      selectedUser, 
+      isChatDeleted: false, 
+      messages: selectedUser ? [] : get().messages,
+      typingUsers: selectedUser ? get().typingUsers : {} 
+    });
+    
+    // Auto-close logout modal when switching chats
+    useAuthStore.getState().closeLogoutModal();
+
     if (selectedUser) {
       localStorage.setItem("selectedUser", JSON.stringify(selectedUser));
       // Mark messages as read when opening a chat
@@ -82,7 +118,6 @@ export const useChatStore = create((set, get) => ({
     } else {
       localStorage.removeItem("selectedUser");
     }
-    set({ selectedUser, isChatDeleted: false, typingUsers: selectedUser ? get().typingUsers : {} });
   },
 
   // Fetch unread counts from server
@@ -135,6 +170,54 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  getChatPreference: async (userId) => {
+    set({ isPreferenceLoading: true });
+    try {
+      const res = await axiosInstance.get(`/preferences/${userId}`);
+      if (get().selectedUser?._id === userId) {
+        set({ chatPreference: res.data });
+      }
+    } catch (error) {
+      console.log("Error in getChatPreference:", error);
+    } finally {
+      if (get().selectedUser?._id === userId) {
+        set({ isPreferenceLoading: false });
+      }
+    }
+  },
+
+  updateChatPreference: async (userId, data) => {
+    try {
+      const res = await axiosInstance.put(`/preferences/${userId}`, data);
+      if (get().selectedUser?._id === userId) {
+        set({ chatPreference: res.data });
+      }
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update preference");
+      return false;
+    }
+  },
+
+  uploadChatBackgroundImage: async (userId, file) => {
+    set({ isPreferenceLoading: true });
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axiosInstance.post(`/preferences/${userId}/background`, formData);
+      if (get().selectedUser?._id === userId) {
+        set({ chatPreference: res.data });
+      }
+      toast.success("Background image updated");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to upload image");
+    } finally {
+      if (get().selectedUser?._id === userId) {
+        set({ isPreferenceLoading: false });
+      }
+    }
+  },
+
   getAllContacts: async () => {
     set({ isUsersLoading: true });
     try {
@@ -168,14 +251,21 @@ export const useChatStore = create((set, get) => ({
       const messagesData = res.data.messages || res.data;
       const isDeleted = res.data.isDeleted || false;
       
-      set({ 
-        messages: Array.isArray(messagesData) ? messagesData.filter((m) => !hidden.includes(m._id)) : [],
-        isChatDeleted: isDeleted 
-      });
+      // Only update state if the user hasn't switched chats while fetching
+      if (get().selectedUser?._id === userId) {
+        set({ 
+          messages: Array.isArray(messagesData) ? messagesData.filter((m) => !hidden.includes(m._id)) : [],
+          isChatDeleted: isDeleted 
+        });
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Something went wrong");
+      if (get().selectedUser?._id === userId) {
+        toast.error(error.response?.data?.message || "Something went wrong");
+      }
     } finally {
-      set({ isMessagesLoading: false });
+      if (get().selectedUser?._id === userId) {
+        set({ isMessagesLoading: false });
+      }
     }
   },
 
@@ -214,6 +304,7 @@ export const useChatStore = create((set, get) => ({
       senderId: authUser._id,
       receiverId: selectedUser._id,
       text: messageData.text || "",
+      deliveryMode: messageData.deliveryMode === "voice" ? "voice" : "text",
       image: messageData.image,
       type: messageData.type || (messageData.image ? "image" : "text"),
       fileUrl: messageData.fileUrl || null,
@@ -237,6 +328,7 @@ export const useChatStore = create((set, get) => ({
     try {
       const payload = {
         text: messageData.text,
+        deliveryMode: messageData.deliveryMode === "voice" ? "voice" : "text",
         image: messageData.image,
         scheduledAt: messageData.scheduledAt,
       };
@@ -312,6 +404,12 @@ export const useChatStore = create((set, get) => ({
         return { messages: [...currentMessages, serverMessage] };
       });
       
+      // Update global last message
+      get().updateGlobalLastMessage(selectedUser._id, {
+        text: "You: " + getMessagePreviewText(serverMessage),
+        createdAt: serverMessage.createdAt
+      });
+
       if (isScheduled) {
         toast.success("Message scheduled successfully!");
       }
@@ -340,7 +438,7 @@ export const useChatStore = create((set, get) => ({
       // Mark as read immediately since we're viewing this chat
       axiosInstance.put(`/messages/read/${selectedUser._id}`).catch(() => {});
 
-      if (isSoundEnabled) {
+      if (isSoundEnabled && get().chatPreference?.notificationsEnabled !== false) {
         const notificationSound = new Audio("/sounds/notification.mp3");
 
         notificationSound.currentTime = 0; // reset to start
@@ -595,6 +693,10 @@ export const useChatStore = create((set, get) => ({
         friendStatus: { status: "not_friends" },
         messages: [], // Clear messages UI (preserved in DB)
       });
+      // Clear selected user if they are the one being removed
+      if (get().selectedUser?._id === userId) {
+        get().setSelectedUser(null);
+      }
       // Refresh all lists to ensure UI is up-to-date
       get().getMyChatPartners();
       get().getAllContacts();
@@ -677,6 +779,14 @@ export const useChatStore = create((set, get) => ({
           receiverId: newMessage.receiverId,
         });
       }
+
+      // Update global last message for the sidebar
+      const prefix = newMessage.senderId === authUser?._id ? "You: " : "";
+      const otherId = newMessage.senderId === authUser?._id ? newMessage.receiverId : newMessage.senderId;
+      get().updateGlobalLastMessage(otherId, {
+        text: prefix + getMessagePreviewText(newMessage),
+        createdAt: newMessage.createdAt
+      });
       
       // If we're not viewing this sender's chat, increment unread count
       if (!selectedUser || selectedUser._id !== newMessage.senderId) {

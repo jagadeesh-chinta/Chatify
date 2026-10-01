@@ -11,6 +11,7 @@ import notificationRoutes from "./routes/notification.route.js";
 import chatkeyRoutes from "./routes/chatkey.route.js";
 import chatRoutes from "./routes/chat.route.js";
 import userRoutes from "./routes/user.route.js";
+import preferenceRoutes from "./routes/preference.route.js";
 import {connectDB} from "./lib/db.js";
 import { app, server } from "./lib/socket.js";
 import { startMessageScheduler } from "./services/scheduler.service.js";
@@ -35,8 +36,24 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/chatkey", chatkeyRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/preferences", preferenceRoutes);
 // compatibility: expose friend endpoints at top-level /api/* paths as well
 app.use("/api", friendRoutes);
+
+// Test SMTP connection
+app.get("/api/test-smtp", async (req, res) => {
+  try {
+    const { mailer } = await import("./lib/mailer.js");
+    const verified = await mailer.verify();
+    if(verified) {
+      res.status(200).json({success: true, message: "Gmail SMTP connection verified!"});
+    } else {
+      res.status(500).json({success: false, message: "Gmail SMTP verification failed"});
+    }
+  } catch (error) {
+    res.status(500).json({success: false, message: error?.message || "SMTP connection error"});
+  }
+});
 
 if (ENV.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));

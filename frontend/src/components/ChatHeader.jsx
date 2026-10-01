@@ -1,15 +1,23 @@
-import { XIcon, Heart, MoreVertical, UserMinus, ArrowLeft } from "lucide-react";
+import { XIcon, Heart, ArrowLeft, Settings } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 
+import { useShallow } from "zustand/react/shallow";
+
 function ChatHeader({ onViewProfile, onRemoveFriend }) {
-  const { selectedUser, setSelectedUser, friendStatus, toggleFavourite, isFavourite, typingUsers } = useChatStore();
+  const { selectedUser, setSelectedUser, friendStatus, toggleFavourite, isFavourite, typingUsers, chatPreference } = useChatStore(useShallow(state => ({
+    selectedUser: state.selectedUser,
+    setSelectedUser: state.setSelectedUser,
+    friendStatus: state.friendStatus,
+    toggleFavourite: state.toggleFavourite,
+    isFavourite: state.isFavourite,
+    typingUsers: state.typingUsers,
+    chatPreference: state.chatPreference,
+  })));
   const { onlineUsers } = useAuthStore();
   const [isFav, setIsFav] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef(null);
   const isOnline = onlineUsers.includes(selectedUser._id);
   const isTyping = !!typingUsers[selectedUser._id];
 
@@ -40,20 +48,7 @@ function ChatHeader({ onViewProfile, onRemoveFriend }) {
     return () => window.removeEventListener("keydown", handleEscKey);
   }, [setSelectedUser]);
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowMenu(false);
-      }
-    };
 
-    if (showMenu) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showMenu]);
 
   const handleToggleFavourite = async () => {
     setIsLoading(true);
@@ -64,10 +59,7 @@ function ChatHeader({ onViewProfile, onRemoveFriend }) {
     setIsLoading(false);
   };
 
-  const handleRemoveFriend = () => {
-    setShowMenu(false);
-    onRemoveFriend && onRemoveFriend();
-  };
+
 
   const handleProfileClick = () => {
     onViewProfile && onViewProfile();
@@ -102,8 +94,8 @@ function ChatHeader({ onViewProfile, onRemoveFriend }) {
           </div>
         </button>
 
-        <div>
-          <h3 className="text-slate-200 font-medium text-sm md:text-base truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">{selectedUser.fullName}</h3>
+        <div className="cursor-pointer hover:opacity-80 transition-opacity" onClick={handleProfileClick}>
+          <h3 className="text-slate-200 font-medium text-sm md:text-base truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">{chatPreference?.nickname || selectedUser.fullName}</h3>
           <p className="text-xs md:text-sm flex items-center gap-1.5 chat-text-muted">
             {isTyping ? (
               <>
@@ -139,35 +131,18 @@ function ChatHeader({ onViewProfile, onRemoveFriend }) {
               )}
             </button>
 
-            {/* Three dots menu */}
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="ripple-btn chat-btn p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
-              >
-                <MoreVertical className="w-5 h-5 text-slate-400 hover:text-slate-200 transition-colors" />
-              </button>
 
-              {/* Dropdown menu */}
-              {showMenu && (
-                <div className="absolute right-0 top-full mt-2 w-44 chat-glass-strong rounded-lg shadow-xl z-50 overflow-hidden cursor-pointer [&_*]:cursor-pointer" style={{ cursor: "pointer" }}>
-                  <button
-                    onClick={handleRemoveFriend}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-white/10 transition-colors text-sm min-h-[44px] cursor-pointer"
-                    style={{ cursor: "pointer" }}
-                  >
-                    <UserMinus className="w-4 h-4" />
-                    Remove Friend
-                  </button>
-                </div>
-              )}
-            </div>
           </>
         )}
 
+        {/* Settings button to view user profile */}
+        <button onClick={handleProfileClick} className="ripple-btn chat-btn p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10">
+          <Settings className="w-5 h-5 text-slate-400 hover:text-cyan-400 transition-colors cursor-pointer" />
+        </button>
+
         {/* Close button - hidden on mobile (use back button instead) */}
         <button onClick={handleBack} className="hidden md:block ripple-btn chat-btn p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10">
-          <XIcon className="w-5 h-5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer" />
+          <XIcon className="w-5 h-5 text-slate-400 hover:text-red-400 transition-colors cursor-pointer" />
         </button>
       </div>
     </div>

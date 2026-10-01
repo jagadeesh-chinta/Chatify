@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
 import { useChatStore } from "../store/useChatStore";
 import UsersLoadingSkeleton from "./UsersLoadingSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
@@ -7,8 +8,17 @@ import { axiosInstance } from "../lib/axios";
 import { Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
+import { useShallow } from "zustand/react/shallow";
+
 function ContactList() {
-  const { setSelectedUser, unreadCounts, selectedUser } = useChatStore();
+  const navigate = useNavigate();
+  const { setSelectedUser, unreadCounts, selectedUser, globalLastMessages, fetchGlobalLastMessages } = useChatStore(useShallow(state => ({
+    setSelectedUser: state.setSelectedUser,
+    unreadCounts: state.unreadCounts,
+    selectedUser: state.selectedUser,
+    globalLastMessages: state.globalLastMessages,
+    fetchGlobalLastMessages: state.fetchGlobalLastMessages
+  })));
   const { onlineUsers } = useAuthStore();
   const [friends, setFriends] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +44,14 @@ function ContactList() {
   useEffect(() => {
     fetchFriends();
   }, []);
+
+  // Fetch last message for each friend efficiently
+  useEffect(() => {
+    if (friends.length > 0) {
+      const userIds = friends.map(f => f._id);
+      fetchGlobalLastMessages(userIds);
+    }
+  }, [friends, fetchGlobalLastMessages]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -79,6 +97,11 @@ function ContactList() {
 
     // Optimistically remove from list
     setFriends((prev) => prev.filter((f) => f._id !== contact._id));
+
+    // Clear selected user if they are the one being deleted
+    if (selectedUser?._id === contact._id) {
+      setSelectedUser(null);
+    }
 
     try {
       await axiosInstance.post(`/chat/delete/${contact._id}`);
@@ -126,29 +149,38 @@ function ContactList() {
   return (
     <>
       {friends.map((contact) => {
+        const lastMessage = globalLastMessages[contact._id];
         const unreadData = unreadCounts[contact._id];
         const unreadCount = unreadData?.count || 0;
         
+        let messagePreview = "No messages yet";
+        if (lastMessage && lastMessage.text) {
+          messagePreview = lastMessage.text;
+        }
+
         return (
           <div
             key={contact._id}
-            className={`chat-list-item p-3 md:p-4 rounded-xl cursor-pointer min-h-[60px] ${selectedUser?._id === contact._id ? "chat-list-item-active" : ""}`}
-            onClick={() => setSelectedUser(contact)}
+            className={`chat-list-item p-2 md:p-3 rounded-lg cursor-pointer min-h-[48px] ${selectedUser?._id === contact._id ? "chat-list-item-active" : ""}`}
+            onClick={() => {
+              setSelectedUser(contact);
+              if (window.location.pathname !== "/") {
+                navigate("/");
+              }
+            }}
             onContextMenu={(e) => handleContextMenu(e, contact)}
           >
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-3">
               <div className={`avatar ${onlineUsers.includes(contact._id) ? "online" : "offline"}`}>
-                <div className="size-10 md:size-12 rounded-full">
+                <div className="size-9 md:size-10 rounded-full">
                   <img src={contact.profilePic || "/avatar.png"} />
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-slate-200 font-medium truncate text-sm md:text-base">{contact.fullName}</h4>
-                {unreadCount > 0 && (
-                  <p className="text-slate-200 text-xs md:text-sm truncate font-medium">
-                    {unreadData.lastMessage}
-                  </p>
-                )}
+                <h4 className="text-slate-300 font-medium truncate text-sm">{contact.fullName}</h4>
+                <p className={`text-xs truncate ${unreadCount > 0 ? "text-slate-200 font-medium" : "text-slate-400"}`}>
+                  {messagePreview}
+                </p>
               </div>
               {/* Unread count badge */}
               {unreadCount > 0 && (

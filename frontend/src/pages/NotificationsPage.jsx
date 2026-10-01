@@ -43,8 +43,8 @@ function NotificationsPage() {
   }, [socket, fetchNotifications, fetchUnreadCount]);
 
   return (
-    <div className={`feature-page chat-theme-${pageTheme} flex items-center justify-center p-2 md:p-4`}>
-      <div className="w-full max-w-2xl">
+    <div className="flex-1 min-h-0 w-full flex items-start justify-center p-2 md:p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl py-4 md:py-8">
         <div className="mb-4 md:mb-6">
           <button
             type="button"

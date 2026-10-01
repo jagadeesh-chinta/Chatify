@@ -75,10 +75,10 @@ const NoConversationPlaceholder = () => {
                   <div
                     key={user._id}
                     onClick={() => handleUserClick(user)}
-                    className="chat-list-item flex items-center gap-3 p-3 rounded-xl cursor-pointer"
+                    className="chat-list-item flex items-center gap-3 p-2 md:p-3 rounded-lg cursor-pointer min-h-[48px]"
                   >
                     <div className={`avatar ${onlineUsers.includes(user._id) ? "online" : "offline"}`}>
-                      <div className="w-10 h-10 rounded-full overflow-hidden">
+                      <div className="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden">
                         <img
                           src={user.profilePic || "/avatar.png"}
                           alt={user.fullName}
@@ -87,7 +87,7 @@ const NoConversationPlaceholder = () => {
                       </div>
                     </div>
                     <div className="flex-1">
-                      <h4 className="text-slate-200 font-medium">{user.fullName}</h4>
+                      <h4 className="text-slate-300 font-medium text-sm">{user.fullName}</h4>
                       <p className="text-slate-400 text-xs">
                         {onlineUsers.includes(user._id) ? "Online" : "Offline"}
                       </p>

@@ -122,8 +122,10 @@ function ChatKeyPage() {
   const pageTheme = localStorage.getItem("chatTheme") || "dark";
 
   const renderCentered = (content) => (
-    <div className={`feature-page chat-theme-${pageTheme} w-full flex items-center justify-center p-4`}>
-      {content}
+    <div className="flex-1 min-h-0 w-full flex items-start justify-center p-4 overflow-y-auto">
+      <div className="w-full flex justify-center py-4 md:py-8">
+        {content}
+      </div>
     </div>
   );
 

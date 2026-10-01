@@ -1,8 +1,15 @@
 import { UserMinus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 function RemoveFriendConfirmation({ userName, onConfirm, onCancel }) {
   const [isRemoving, setIsRemoving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   const handleConfirm = async () => {
     setIsRemoving(true);
@@ -10,11 +17,11 @@ function RemoveFriendConfirmation({ userName, onConfirm, onCancel }) {
     setIsRemoving(false);
   };
 
-  return (
-    <div className="absolute inset-0 flex items-center justify-center z-50">
+  const modalContent = (
+    <div className="fixed inset-0 flex items-center justify-center z-[9999]">
       {/* Blur backdrop */}
       <div 
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
         onClick={onCancel}
       />
       
@@ -33,9 +40,16 @@ function RemoveFriendConfirmation({ userName, onConfirm, onCancel }) {
         </h3>
 
         {/* Message */}
-        <p className="text-slate-400 text-center mb-6">
+        <p className="text-slate-400 text-center mb-4">
           Are you sure you want to remove <span className="text-slate-200 font-medium">{userName}</span> as a friend?
         </p>
+
+        {/* Note */}
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-6">
+          <p className="text-red-400 text-xs text-center leading-relaxed">
+            <span className="font-semibold">Note:</span> If you remove the friend, the entire chat will be deleted and no need to restore.
+          </p>
+        </div>
 
         {/* Buttons */}
         <div className="flex gap-3">
@@ -61,6 +75,10 @@ function RemoveFriendConfirmation({ userName, onConfirm, onCancel }) {
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+  
+  return createPortal(modalContent, document.body);
 }
 
 export default RemoveFriendConfirmation;

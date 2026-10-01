@@ -10,6 +10,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    phoneNumber: {
+        type: String,
+        required: true,
+        unique: true,
+    },
     password: {
         type: String,
         required: true,
@@ -30,6 +35,14 @@ const userSchema = new mongoose.Schema({
     isChatKeyPasswordSet: {
         type: Boolean,
         default: false,
+    },
+    isWelcomeEmailSent: {
+        type: Boolean,
+        default: false,
+    },
+    welcomeEmailSentAt: {
+        type: Date,
+        default: null,
     },
 },
 { timestamps: true }); //createdAt and updatedAt

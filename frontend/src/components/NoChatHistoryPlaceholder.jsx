@@ -1,6 +1,13 @@
 import { MessageCircleIcon } from "lucide-react";
+import { useChatStore } from "../store/useChatStore";
 
 const NoChatHistoryPlaceholder = ({ name }) => {
+  const { sendMessage } = useChatStore();
+
+  const handleQuickMessage = (text) => {
+    sendMessage({ text, deliveryMode: "text" });
+  };
+
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-6">
       <div className="w-16 h-16 bg-gradient-to-br from-cyan-500/20 to-cyan-400/10 rounded-full flex items-center justify-center mb-5">
@@ -16,13 +23,22 @@ const NoChatHistoryPlaceholder = ({ name }) => {
         <div className="h-px w-32 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent mx-auto"></div>
       </div>
       <div className="flex flex-wrap gap-2 justify-center">
-        <button className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors">
+        <button 
+          onClick={() => handleQuickMessage("👋 Say Hello")}
+          className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors"
+        >
           👋 Say Hello
         </button>
-        <button className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors">
+        <button 
+          onClick={() => handleQuickMessage("🤝 How are you?")}
+          className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors"
+        >
           🤝 How are you?
         </button>
-        <button className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors">
+        <button 
+          onClick={() => handleQuickMessage("📅 Meet up soon?")}
+          className="ripple-btn chat-btn px-4 py-2 text-xs font-medium text-cyan-200 bg-gradient-to-r from-[#00c6ff]/25 to-[#00ffcc]/20 rounded-full hover:from-[#00c6ff]/35 hover:to-[#00ffcc]/30 transition-colors"
+        >
           📅 Meet up soon?
         </button>
       </div>

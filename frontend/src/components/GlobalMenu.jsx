@@ -2,11 +2,12 @@ import { useState } from "react";
 import { MoreVertical } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useAuthStore } from "../store/useAuthStore";
+import LogoutConfirmation from "./LogoutConfirmation";
 
 function GlobalMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
-  const { logout } = useAuthStore();
+  const { logout, openLogoutModal } = useAuthStore();
 
   return (
     <>
@@ -33,7 +34,7 @@ function GlobalMenu() {
               <div className="border-t border-slate-600 my-1"></div>
               <button
                 onClick={() => {
-                  logout();
+                  openLogoutModal();
                   setMenuOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-slate-200 hover:bg-slate-700 rounded transition-colors"

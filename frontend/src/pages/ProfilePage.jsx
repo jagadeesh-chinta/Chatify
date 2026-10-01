@@ -110,6 +110,48 @@ function ProfilePage() {
     setIsEditingUsername(false);
   };
 
+  // Phone number editing state
+  const [isEditingPhoneNumber, setIsEditingPhoneNumber] = useState(false);
+  const [newPhoneNumber, setNewPhoneNumber] = useState(authUser?.phoneNumber || "");
+  const [isUpdatingPhoneNumber, setIsUpdatingPhoneNumber] = useState(false);
+
+  // Handle phone number update
+  const handleUpdatePhoneNumber = async () => {
+    if (!newPhoneNumber.trim()) {
+      toast.error("Phone number cannot be empty");
+      return;
+    }
+
+    if (!/^\d{7,15}$/.test(newPhoneNumber.trim())) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+
+    if (newPhoneNumber.trim() === authUser.phoneNumber) {
+      setIsEditingPhoneNumber(false);
+      return;
+    }
+
+    setIsUpdatingPhoneNumber(true);
+    try {
+      const res = await axiosInstance.put("/user/update-phone", { 
+        phoneNumber: newPhoneNumber.trim() 
+      });
+      setAuthUser(res.data);
+      setIsEditingPhoneNumber(false);
+      toast.success("Phone number updated successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update phone number");
+    } finally {
+      setIsUpdatingPhoneNumber(false);
+    }
+  };
+
+  const handleCancelPhoneNumberEdit = () => {
+    setIsEditingPhoneNumber(false);
+    setNewPhoneNumber(authUser?.phoneNumber || "");
+  };
+
   // Handle password change
   const handleChangePassword = async () => {
     const { currentPassword, newPassword, confirmPassword } = passwordData;
@@ -196,7 +238,7 @@ function ProfilePage() {
   const pageTheme = localStorage.getItem("chatTheme") || "dark";
 
   return (
-    <div className={`feature-page chat-theme-${pageTheme} flex items-start justify-center p-2 md:p-4 md:py-8 overflow-y-auto`}>
+    <div className="flex-1 min-h-0 w-full flex items-start justify-center p-2 md:p-4 md:py-8 overflow-y-auto">
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="mb-4 md:mb-6">
@@ -315,6 +357,56 @@ function ProfilePage() {
                 <span className="text-slate-200 font-medium">{authUser?.fullName}</span>
                 <button
                   onClick={() => setIsEditingUsername(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Phone Number Section */}
+          <div className="mb-6">
+            <label className="block text-slate-400 text-sm mb-2">Phone Number</label>
+            {isEditingPhoneNumber ? (
+              <div className="space-y-3">
+                <input
+                  type="tel"
+                  value={newPhoneNumber}
+                  onChange={(e) => setNewPhoneNumber(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500 transition-colors"
+                  placeholder="Enter new phone number"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleUpdatePhoneNumber}
+                    disabled={isUpdatingPhoneNumber}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-600/50 text-white rounded-lg transition-colors"
+                  >
+                    {isUpdatingPhoneNumber ? (
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelPhoneNumberEdit}
+                    disabled={isUpdatingPhoneNumber}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-4 bg-slate-900/30 border border-slate-700/50 rounded-lg">
+                <span className="text-slate-200 font-medium">{authUser?.phoneNumber || "Not provided"}</span>
+                <button
+                  onClick={() => setIsEditingPhoneNumber(true)}
                   className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm"
                 >
                   <Edit3 className="w-4 h-4" />

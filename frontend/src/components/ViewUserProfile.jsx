@@ -1,19 +1,21 @@
-import { ArrowLeft, User, Calendar } from "lucide-react";
+import { ArrowLeft, User, Calendar, UserMinus, Ban } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
+import RemoveFriendConfirmation from "./RemoveFriendConfirmation";
 
-function ViewUserProfile({ userId, onBack }) {
+function ViewUserProfile({ userId, initialProfile, onBack }) {
   const { getOtherUserProfile } = useChatStore();
   const { onlineUsers } = useAuthStore();
-  const [profile, setProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [profile, setProfile] = useState(initialProfile || null);
+  const [isLoading, setIsLoading] = useState(!initialProfile);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   const isOnline = onlineUsers.includes(userId);
 
   useEffect(() => {
     const fetchProfile = async () => {
-      setIsLoading(true);
+      if (!profile) setIsLoading(true);
       const data = await getOtherUserProfile(userId);
       setProfile(data);
       setIsLoading(false);
@@ -93,8 +95,8 @@ function ViewUserProfile({ userId, onBack }) {
       </div>
 
       {/* Profile Content */}
-      <div className="flex-1 flex items-center justify-center p-4 md:p-6 overflow-y-auto">
-        <div className="w-full max-w-md">
+      <div className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col items-center">
+        <div className="w-full max-w-md my-auto flex-shrink-0">
           {/* Profile Card */}
           <div className="feature-card p-6 md:p-8">
             {/* Profile Icon Header */}
@@ -150,9 +152,45 @@ function ViewUserProfile({ userId, onBack }) {
                 <span className="text-slate-300">{formatJoinDate(profile.createdAt)}</span>
               </div>
             </div>
+            {/* Action Buttons */}
+            <div className="mt-8 pt-6 border-t border-slate-800 space-y-3">
+              <button
+                onClick={() => setShowRemoveConfirm(true)}
+                className="w-full py-3 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <UserMinus className="w-5 h-5" />
+                Remove Friend
+              </button>
+              
+              <button
+                onClick={() => {
+                  import("react-hot-toast").then((module) => {
+                    module.default("Block feature is currently under development");
+                  });
+                }}
+                className="w-full py-3 px-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 rounded-xl text-slate-300 transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <Ban className="w-5 h-5" />
+                Block User
+              </button>
+            </div>
           </div>
         </div>
       </div>
+      
+      {showRemoveConfirm && (
+        <RemoveFriendConfirmation
+          userName={profile.fullName}
+          onConfirm={async () => {
+            const { useChatStore } = await import("../store/useChatStore");
+            const success = await useChatStore.getState().removeFriend(userId);
+            if (success) {
+              onBack();
+            }
+          }}
+          onCancel={() => setShowRemoveConfirm(false)}
+        />
+      )}
     </div>
   );
 }

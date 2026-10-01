@@ -1,6 +1,7 @@
 import express from "express";
 import { 
     updateUsername, 
+    updatePhoneNumber,
     changePassword, 
     updateAvatar, 
     deleteAvatar, 
@@ -18,6 +19,9 @@ router.get("/profile", getProfile);
 
 // Update username
 router.put("/update-username", updateUsername);
+
+// Update phone number
+router.put("/update-phone", updatePhoneNumber);
 
 // Change password
 router.put("/change-password", changePassword);

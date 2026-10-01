@@ -3,6 +3,7 @@ import Friend from "../models/Friend.js";
 import User from "../models/User.js";
 import ChatKey from "../models/ChatKey.js";
 import DeletedChat from "../models/DeletedChat.js";
+import Message from "../models/Message.js";
 import { generateSharedKey } from "../services/bb84.service.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 import { createAndSendNotification } from "./notification.controller.js";
@@ -311,8 +312,8 @@ export const getFriendsList = async (req, res) => {
       (id) => !deletedUserIds.includes(id.toString())
     );
 
-    // Fetch full friend details (exclude password)
-    const friends = await User.find({ _id: { $in: activeFriendIds } }).select("-password");
+    // Fetch full friend details (exclude sensitive fields)
+    const friends = await User.find({ _id: { $in: activeFriendIds } }).select("-password -email -phoneNumber -chatKeyPassword");
 
     res.status(200).json(friends);
   } catch (error) {
@@ -381,6 +382,24 @@ export const removeFriend = async (req, res) => {
     });
     console.log("Removed from favourites");
 
+    // 5. Delete all Messages between the two users
+    await Message.deleteMany({
+      $or: [
+        { senderId: myId, receiverId: userId },
+        { senderId: userId, receiverId: myId }
+      ]
+    });
+    console.log("Deleted all messages between", myId.toString(), "and", userId);
+
+    // 6. Delete all DeletedChat history entries
+    await DeletedChat.deleteMany({
+      $or: [
+        { userId: myId, otherUserId: userId },
+        { userId: userId, otherUserId: myId }
+      ]
+    });
+    console.log("Deleted chat deletion records between", myId.toString(), "and", userId);
+
     // Notify both users via socket
     try {
       const myIdStr = myId.toString();
@@ -412,8 +431,8 @@ export const getOtherUserProfile = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // Find user by ID (exclude sensitive fields)
-    const user = await User.findById(userId).select("-password -chatKeyPassword");
+    // Find user by ID (exclude sensitive fields like email and phoneNumber)
+    const user = await User.findById(userId).select("-password -chatKeyPassword -email -phoneNumber");
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });

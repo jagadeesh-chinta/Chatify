@@ -71,6 +71,8 @@ const extractMediaDuration = (file, mediaElementType) =>
     };
   });
 
+import { useShallow } from "zustand/react/shallow";
+
 function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
   const [text, setText] = useState("");
@@ -84,6 +86,7 @@ function MessageInput() {
   const [mediaFileName, setMediaFileName] = useState("");
   const [mediaFileSize, setMediaFileSize] = useState(0);
   const [mediaDuration, setMediaDuration] = useState(null);
+  const [deliveryModeForNextMessage, setDeliveryModeForNextMessage] = useState("text");
 
   const fileInputRef = useRef(null);
   const mediaInputRef = useRef(null);
@@ -177,7 +180,19 @@ function MessageInput() {
     deletedMessageTemp,
     undoDeleteForMe,
     confirmDeleteForMe,
-  } = useChatStore();
+  } = useChatStore(useShallow(state => ({
+    sendMessage: state.sendMessage,
+    isSoundEnabled: state.isSoundEnabled,
+    isUploadingMedia: state.isUploadingMedia,
+    mediaUploadProgress: state.mediaUploadProgress,
+    selectedUser: state.selectedUser,
+    editingMessage: state.editingMessage,
+    setEditingMessage: state.setEditingMessage,
+    editMessage: state.editMessage,
+    deletedMessageTemp: state.deletedMessageTemp,
+    undoDeleteForMe: state.undoDeleteForMe,
+    confirmDeleteForMe: state.confirmDeleteForMe
+  })));
   const socket = useAuthStore((state) => state.socket);
   const authUser = useAuthStore((state) => state.authUser);
 
@@ -309,8 +324,11 @@ function MessageInput() {
 
     if (isSoundEnabled) playRandomKeyStrokeSound();
 
+    const canUseVoiceDelivery = text.trim() && !imagePreview && !mediaFile;
+
     sendMessage({
       text: text.trim(),
+      deliveryMode: canUseVoiceDelivery && deliveryModeForNextMessage === "voice" ? "voice" : "text",
       image: imagePreview,
       mediaFile,
       type: mediaType,
@@ -337,6 +355,7 @@ function MessageInput() {
     }
     setScheduledDateTime("");
     setShowScheduler(false);
+    setDeliveryModeForNextMessage("text");
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
@@ -538,6 +557,40 @@ function MessageInput() {
             <span />
             <span />
           </span>
+        </div>
+      )}
+
+      {!editingMessage && !imagePreview && !mediaFile && (
+        <div className="mb-2 ml-1 flex items-center justify-between">
+          <span className="text-[11px] text-slate-400">Next message mode</span>
+          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-slate-800/50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setDeliveryModeForNextMessage("text")}
+              className={`ripple-btn chat-btn rounded-full px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1 ${
+                deliveryModeForNextMessage === "text"
+                  ? "bg-cyan-500/20 text-cyan-200"
+                  : "text-slate-300 hover:text-slate-100"
+              }`}
+              title="Send next text as normal text"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Text
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeliveryModeForNextMessage("voice")}
+              className={`ripple-btn chat-btn rounded-full px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1 ${
+                deliveryModeForNextMessage === "voice"
+                  ? "bg-cyan-500/20 text-cyan-200"
+                  : "text-slate-300 hover:text-slate-100"
+              }`}
+              title="Send next text as a voice message"
+            >
+              <FileAudio2 className="w-3.5 h-3.5" />
+              Voice
+            </button>
+          </div>
         </div>
       )}
 

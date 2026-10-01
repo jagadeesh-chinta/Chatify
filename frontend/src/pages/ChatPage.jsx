@@ -1,4 +1,5 @@
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
 import { useEffect, useState } from "react";
 
 import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
@@ -8,9 +9,23 @@ import ChatsList from "../components/ChatsList";
 import ContactList from "../components/ContactList";
 import ChatContainer from "../components/ChatContainer";
 import NoConversationPlaceholder from "../components/NoConversationPlaceholder";
+import LogoutConfirmation from "../components/LogoutConfirmation";
+import VerticalNavigation from "../components/VerticalNavigation";
 import { useNotificationStore } from "../store/useNotificationStore";
 
+import ProfilePage from "./ProfilePage";
+import ChatKeyPage from "./ChatKeyPage";
+import RestoreChat from "./RestoreChat";
+import RequestsPage from "../components/RequestsPage";
+import NotificationsPage from "./NotificationsPage";
+import SettingsPage from "./SettingsPage";
+
+import { useLocation } from "react-router";
+
 function ChatPage() {
+  const location = useLocation();
+  const rightPane = location.pathname.split("/")[1] || "chat";
+  const { isLogoutModalOpen, logout, closeLogoutModal } = useAuthStore();
   const { 
     activeTab, 
     selectedUser, 
@@ -64,24 +79,62 @@ function ChatPage() {
       <div className="relative h-[98vh] w-[98vw] md:h-[90vh] md:w-[90vw] max-w-[1400px]">
       <BorderAnimatedContainer>
         {/* LEFT SIDE - Sidebar (hidden on mobile when chat is open) */}
+        {/* Add group class and hover width transitions for the vertical navigation */}
         <div className={`
-          h-full w-full md:w-[320px] lg:w-[360px] chat-glass flex flex-col overflow-hidden
-          ${selectedUser ? 'hidden md:flex' : 'flex'}
+          h-full w-full chat-glass flex flex-col overflow-hidden transition-[width] duration-300 ease-in-out
+          ${rightPane !== "chat" || isLogoutModalOpen ? 'hidden' : selectedUser ? 'hidden md:flex' : 'flex'}
+          group/sidebar
+          md:w-[380px] lg:w-[420px]
+          has-[#vertical-nav:hover]:md:w-[512px] has-[#vertical-nav:hover]:lg:w-[552px]
         `}>
           <ProfileHeader theme={theme} onToggleTheme={toggleTheme} />
-          <ActiveTabSwitch />
+          
+          <div className="flex flex-1 overflow-hidden">
+            {/* Vertical Navigation Rail */}
+            <div className="border-r border-white/5 py-2 transition-[width] duration-300 ease-in-out w-[68px] has-[#vertical-nav:hover]:w-[200px] overflow-x-hidden overflow-y-auto chat-scroll">
+              <VerticalNavigation currentPane={rightPane} />
+            </div>
 
-          <div className="flex-1 overflow-y-auto chat-scroll p-4 space-y-2 overscroll-contain">
-            {activeTab === "chats" ? <ChatsList /> : <ContactList />}
+            {/* Contacts Area */}
+            <div className="flex-1 flex flex-col min-w-[312px] lg:min-w-[352px] overflow-hidden">
+              <ActiveTabSwitch />
+              <div className="flex-1 overflow-y-auto chat-scroll p-4 space-y-2 overscroll-contain">
+                {activeTab === "chats" ? <ChatsList /> : <ContactList />}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* RIGHT SIDE - Chat area (full width on mobile when chat is open) */}
         <div className={`
-          h-full flex-1 flex flex-col chat-glass overflow-hidden
-          ${selectedUser ? 'flex' : 'hidden md:flex'}
+          h-full flex-1 flex flex-col chat-glass overflow-hidden relative
+          ${selectedUser || isLogoutModalOpen || rightPane !== "chat" ? 'flex' : 'hidden md:flex'}
         `}>
-          {selectedUser ? <ChatContainer /> : <NoConversationPlaceholder />}
+          {isLogoutModalOpen ? (
+            <LogoutConfirmation 
+              onConfirm={() => {
+                logout();
+                closeLogoutModal();
+              }}
+              onCancel={closeLogoutModal}
+            />
+          ) : rightPane === "profile" ? (
+            <ProfilePage />
+          ) : rightPane === "chatkey" ? (
+            <ChatKeyPage />
+          ) : rightPane === "restore-chat" ? (
+            <RestoreChat />
+          ) : rightPane === "requests" ? (
+            <RequestsPage />
+          ) : rightPane === "notifications" ? (
+            <NotificationsPage />
+          ) : rightPane === "settings" ? (
+            <SettingsPage />
+          ) : selectedUser ? (
+            <ChatContainer />
+          ) : (
+            <NoConversationPlaceholder />
+          )}
         </div>
       </BorderAnimatedContainer>
       </div>
