@@ -25,7 +25,7 @@ export const sendOTPEmail = async (email, otp) => {
             from: `${sender.name} <${sender.email}>`,
             to: email,
             subject: 'Your Chatify OTP',
-            text: `Your OTP is ${otp}. It expires in 1 minute.`,
+            text: `Your OTP is ${otp}. It expires in 2 minutes.`,
             html: createOTPEmailTemplate(otp)
         });
         console.log("OTP email sent successfully:", info?.messageId || info?.response || "OK");

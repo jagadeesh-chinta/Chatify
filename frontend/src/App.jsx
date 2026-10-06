@@ -11,13 +11,18 @@ import WelcomeScreen from "./pages/WelcomeScreen";
 import RequestsPage from "./components/RequestsPage";
 import SettingsPage from "./pages/SettingsPage";
 import { useAuthStore } from "./store/useAuthStore";
+import { useAdminStore } from "./store/useAdminStore";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
 import { useEffect } from "react";
 import PageLoader from "./components/PageLoader";
 import {Toaster} from "react-hot-toast";
+import BannedOverlay from "./components/BannedOverlay";
 
 function App()
 {
   const {checkAuth, isCheckingAuth, authUser} = useAuthStore();
+  const { checkAdminAuth, isCheckingAdminAuth } = useAdminStore();
   const location = useLocation();
   const shouldShowWelcome =
     !!authUser && sessionStorage.getItem("chatifyShowWelcome") === "1";
@@ -30,13 +35,15 @@ function App()
     location.pathname === "/notifications" ||
     location.pathname === "/login" ||
     location.pathname === "/settings" ||
-    location.pathname === "/signup";
+    location.pathname === "/signup" ||
+    location.pathname.startsWith("/admin");
 
   useEffect(() => {
     checkAuth();
-  },[checkAuth]);
+    checkAdminAuth();
+  },[checkAuth, checkAdminAuth]);
 
-  if(isCheckingAuth) return <PageLoader />;
+  if(isCheckingAuth || isCheckingAdminAuth) return <PageLoader />;
 
   return(
   <div className = {`h-screen w-screen bg-slate-900 relative ${isScrollableRoute ? "overflow-y-auto overflow-x-hidden" : "overflow-hidden"}`}>
@@ -67,9 +74,13 @@ function App()
         <Route path="/profile/view-image" element={authUser ? <ViewProfileImage /> : <Navigate to={"/login"}/>} />
         <Route path="/login" element={!authUser ? <LoginPage initialMode="signin" /> : <Navigate to={shouldShowWelcome ? "/welcome" : "/chat"} replace />} />
         <Route path="/signup" element={!authUser ? <LoginPage initialMode="signup" /> : <Navigate to={"/"} />} />
+        
+        <Route path="/admin" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Routes>
 
       <Toaster />
+      <BannedOverlay />
     </div>
   </div>
   );

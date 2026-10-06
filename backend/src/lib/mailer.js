@@ -1,26 +1,24 @@
 import nodemailer from "nodemailer";
 import { ENV } from "./env.js";
 
-const smtpPort = Number(ENV.SMTP_PORT || 587);
-const smtpSecure = String(ENV.SMTP_SECURE || "false").toLowerCase() === "true";
-
 export const mailer = nodemailer.createTransport({
-  host: ENV.SMTP_HOST || "smtp.gmail.com",
-  port: smtpPort,
-  secure: smtpSecure,
+  service: "gmail",
   auth: {
-    user: ENV.SMTP_USER,
-    pass: ENV.SMTP_PASS,
+    type: "OAuth2",
+    user: ENV.EMAIL_USER,
+    clientId: ENV.GOOGLE_CLIENT_ID,
+    clientSecret: ENV.GOOGLE_CLIENT_SECRET,
+    refreshToken: ENV.GOOGLE_REFRESH_TOKEN,
   },
 });
 
 export const sender = {
-  email: ENV.EMAIL_FROM || ENV.SMTP_USER,
+  email: ENV.EMAIL_USER,
   name: ENV.EMAIL_FROM_NAME || "Chatify",
 };
 
 export const assertMailerConfig = () => {
-  if (!ENV.SMTP_USER || !ENV.SMTP_PASS) {
-    throw new Error("SMTP is not configured. Set SMTP_USER and SMTP_PASS in backend/.env");
+  if (!ENV.GOOGLE_CLIENT_ID || !ENV.GOOGLE_CLIENT_SECRET || !ENV.GOOGLE_REFRESH_TOKEN) {
+    throw new Error("Gmail OAuth2 is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN in backend/.env");
   }
 };

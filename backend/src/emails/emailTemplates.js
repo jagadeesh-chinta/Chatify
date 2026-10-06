@@ -153,7 +153,7 @@ export function createOTPEmailTemplate(otp) {
               </p>
 
               <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#555;">
-                You requested to sign in to your Chatify account. Use the one-time password (OTP) below to complete your login. This code will expire in <strong>1 minute</strong>.
+                You requested to sign in to your Chatify account. Use the one-time password (OTP) below to complete your login. This code will expire in <strong>2 minutes</strong>.
               </p>
 
               <!-- OTP Box -->

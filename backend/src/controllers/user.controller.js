@@ -253,3 +253,30 @@ export const getProfile = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+export const submitBanAppeal = async (req, res) => {
+    try {
+        const { message } = req.body;
+        const userId = req.user._id;
+
+        if (!message || !message.trim()) {
+            return res.status(400).json({ message: 'Appeal message cannot be empty' });
+        }
+
+        const user = await User.findById(userId);
+        if (!user.isBanned) {
+            return res.status(400).json({ message: 'User is not banned' });
+        }
+        if (user.banAppeal) {
+            return res.status(400).json({ message: 'You have already submitted an appeal' });
+        }
+
+        user.banAppeal = message.trim();
+        await user.save();
+
+        res.status(200).json({ message: 'Appeal submitted successfully', user });
+    } catch (error) {
+        console.error('Error in submitBanAppeal:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};

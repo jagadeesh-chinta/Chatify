@@ -37,6 +37,25 @@ function SettingsPage() {
   const [masterNotification, setMasterNotification] = useState(true);
   const [notifyRequests, setNotifyRequests] = useState(true);
   const [notifyMessages, setNotifyMessages] = useState(true);
+
+  // Feedback State
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
+  const handleFeedbackSubmit = async (e) => {
+    e.preventDefault();
+    if (!feedbackMessage.trim()) return;
+    setIsSubmittingFeedback(true);
+    try {
+        await axiosInstance.post("/feedback", { message: feedbackMessage });
+        toast.success("Thank you! Your feedback has been sent.");
+        setFeedbackMessage("");
+    } catch (error) {
+        toast.error(error.response?.data?.message || "Failed to send feedback");
+    } finally {
+        setIsSubmittingFeedback(false);
+    }
+  };
   
   // Deletion state
   const [deletionScheduledAt, setDeletionScheduledAt] = useState(() => {
@@ -214,12 +233,35 @@ function SettingsPage() {
             <h2 className="text-xl font-semibold text-slate-100 flex items-center gap-2 mb-6">
               <MessageSquare className="w-5 h-5 text-cyan-400" /> Feedback
             </h2>
-            <div className="flex flex-col items-center justify-center py-12 px-4 bg-slate-800/30 border border-slate-700/50 rounded-xl text-center">
-              <Info className="w-12 h-12 text-cyan-500/50 mb-4" />
-              <h3 className="text-lg font-medium text-slate-200 mb-2">Under Working</h3>
-              <p className="text-slate-400 text-sm">
-                The feedback system is currently under development. You will be notified when it is ready.
+            <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-6">
+              <p className="text-slate-300 text-sm mb-4">
+                We value your opinion! Let us know how we can improve Chatify.
               </p>
+              <form onSubmit={handleFeedbackSubmit} className="space-y-4">
+                <textarea
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="Type your feedback here..."
+                  className="w-full h-32 px-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 resize-none"
+                  required
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingFeedback || !feedbackMessage.trim()}
+                    className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                  >
+                    {isSubmittingFeedback ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Feedback"
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         );

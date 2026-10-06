@@ -7,7 +7,7 @@ import {sendWelcomeEmail, sendOTPEmail} from '../emails/emailHandlers.js';
 import cloudinary from '../lib/cloudinary.js';
 
 const isGmailAddress = (email) => /@gmail\.com$/i.test(String(email || "").trim());
-const OTP_EXPIRY_MS = 60 * 1000;
+const OTP_EXPIRY_MS = 2 * 60 * 1000;
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 

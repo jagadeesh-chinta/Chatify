@@ -223,7 +223,7 @@ function LoginPage({ initialMode = "signin" }) {
     if (resendCountdown > 0) return;
     
     await resendOTP(otpEmail);
-    setResendCountdown(30);
+    setResendCountdown(120);
   };
 
   const handleBackToLogin = () => {
@@ -465,6 +465,10 @@ function LoginPage({ initialMode = "signin" }) {
                       {resendCountdown > 0 ? `Resend in ${resendCountdown}s` : "Resend OTP"}
                     </button>
                   </div>
+                  
+                  <p className="mt-4 text-center text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <span className="font-medium text-slate-700">Note:</span> If you don't see the email, please check your <strong className="text-slate-700">spam</strong> or <strong className="text-slate-700">junk</strong> folder.
+                  </p>
                   </div>
                 </div>
               )}

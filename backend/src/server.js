@@ -12,6 +12,8 @@ import chatkeyRoutes from "./routes/chatkey.route.js";
 import chatRoutes from "./routes/chat.route.js";
 import userRoutes from "./routes/user.route.js";
 import preferenceRoutes from "./routes/preference.route.js";
+import adminRoutes from "./routes/admin.route.js";
+import feedbackRoutes from "./routes/feedback.route.js";
 import {connectDB} from "./lib/db.js";
 import { app, server } from "./lib/socket.js";
 import { startMessageScheduler } from "./services/scheduler.service.js";
@@ -37,6 +39,8 @@ app.use("/api/chatkey", chatkeyRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/preferences", preferenceRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/feedback", feedbackRoutes);
 // compatibility: expose friend endpoints at top-level /api/* paths as well
 app.use("/api", friendRoutes);
 

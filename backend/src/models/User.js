@@ -44,6 +44,14 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
+    isBanned: {
+        type: Boolean,
+        default: false,
+    },
+    banAppeal: {
+        type: String,
+        default: null,
+    }
 },
 { timestamps: true }); //createdAt and updatedAt
 

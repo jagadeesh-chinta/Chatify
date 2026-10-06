@@ -5,7 +5,8 @@ import {
     changePassword, 
     updateAvatar, 
     deleteAvatar, 
-    getProfile 
+    getProfile,
+    submitBanAppeal
 } from "../controllers/user.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 
@@ -31,5 +32,8 @@ router.put("/update-avatar", updateAvatar);
 
 // Delete avatar (revert to default)
 router.delete("/delete-avatar", deleteAvatar);
+
+// Submit ban appeal
+router.post("/submit-ban-appeal", submitBanAppeal);
 
 export default router;
