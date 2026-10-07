@@ -7,7 +7,6 @@ export const ENV = {
     NODE_ENV: process.env.NODE_ENV,
     EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME,
     EMAIL_USER: process.env.EMAIL_USER,
-    EMAIL_APP_PASSWORD: process.env.EMAIL_APP_PASSWORD,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN,
