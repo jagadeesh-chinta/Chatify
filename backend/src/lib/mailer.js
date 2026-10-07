@@ -4,11 +4,8 @@ import { ENV } from "./env.js";
 export const mailer = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    type: "OAuth2",
     user: ENV.EMAIL_USER,
-    clientId: ENV.GOOGLE_CLIENT_ID,
-    clientSecret: ENV.GOOGLE_CLIENT_SECRET,
-    refreshToken: ENV.GOOGLE_REFRESH_TOKEN,
+    pass: ENV.EMAIL_APP_PASSWORD, // Gmail App Password (never expires)
   },
 });
 
@@ -18,7 +15,9 @@ export const sender = {
 };
 
 export const assertMailerConfig = () => {
-  if (!ENV.GOOGLE_CLIENT_ID || !ENV.GOOGLE_CLIENT_SECRET || !ENV.GOOGLE_REFRESH_TOKEN) {
-    throw new Error("Gmail OAuth2 is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN in backend/.env");
+  if (!ENV.EMAIL_USER || !ENV.EMAIL_APP_PASSWORD) {
+    throw new Error(
+      "Gmail SMTP is not configured. Set EMAIL_USER and EMAIL_APP_PASSWORD in environment variables."
+    );
   }
 };
